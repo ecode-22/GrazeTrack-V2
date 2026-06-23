@@ -1,0 +1,1830 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#10b981">
+    <title>GrazingTrack</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+
+    <aside class="sidebar" id="sidebar">
+        <div class="sb-header">
+            <div class="sb-brand">
+                <span class="sb-leaf">🌾</span>
+                <div class="sb-brand-text">
+                    <div class="sb-name">GrazingTrack</div>
+                    <div class="sb-sub" id="farmNameDisplay">Free &amp; Open Source</div>
+                </div>
+            </div>
+            <div class="sb-header-actions">
+                <button class="sb-collapse-btn" onclick="toggleSidebar()" title="Collapse sidebar">◀</button>
+                <button class="sb-x" onclick="closeSidebar()">✕</button>
+            </div>
+        </div>
+
+        <div class="sb-tools">
+            <div class="sb-label">🛠 Drawing Tools</div>
+            <div class="tool-grid">
+                <button class="tcrd active" id="btnSelect" onclick="setTool('select')">↖ Select</button>
+                <button class="tcrd" id="btnDraw" onclick="setTool('draw')">✏️ Draw</button>
+                <button class="tcrd green" id="btnAutoSplit" onclick="openAutoSplit()">⬡ Auto-split</button>
+                <button class="tcrd" id="btnEdit" onclick="setTool('edit')" style="display:none">✎ Reshape</button>
+            </div>
+            <button class="undo-btn" id="btnUndo" onclick="undoLastVertex()" style="display:none">↩ Undo last point</button>
+            <button class="del-btn" id="btnDelete" onclick="deleteSelected()" style="display:none">✕ Delete selected field</button>
+            <button class="btn-grazing" onclick="openGrazingModal(null)">🐄 Log Grazing Event</button>
+
+            <button class="ndvi-toggle-btn" id="btnNDVI" onclick="toggleNDVIPanel()">🛰️ Vegetation Heatmap (NDVI)</button>
+
+            <button class="ndvi-toggle-btn" id="btnHeatmap" onclick="togglePressureHeatmap()" style="border-color: #d97706; color: #b45309; margin-top: 8px;">
+                🔥 Historical Grazing Pressure
+            </button>
+
+            <div class="ndvi-panel" id="ndviPanel" style="display:none; margin-top:10px; padding:10px; border:1px solid #ddd; border-radius:8px; background:#fff;">
+                <div style="height:10px; border-radius:5px; margin-bottom:4px; background:linear-gradient(to right, #7c2d12, #ca8a04, #4ade80, #14532d);"></div>
+                <div style="display:flex; justify-content:space-between; font-size:9px; color:#6b7280; margin-bottom:10px;">
+                    <span>Stressed/Bare</span>
+                    <span>Lush/Dense</span>
+                </div>
+                <div class="ndvi-controls">
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:11px; font-weight:600; display:block; margin-bottom:4px;">Map Date</label>
+                        <input type="date" id="ndviDate" onchange="applyNDVI()" style="width:100%; padding:4px; font-size:12px;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px; font-weight:600; display:block; margin-bottom:4px;">Opacity</label>
+                        <input type="range" id="ndviOpacity" min="0.1" max="1.0" step="0.1" value="0.7" oninput="applyNDVI()" style="width:100%;">
+                    </div>
+                </div>
+                <p class="ndvi-note">Uses NASA satellite data. Processing lag is ~14 days from today.</p>
+            </div>
+
+            <p class="tool-hint" id="toolHint">💡 Click a field on the map to select it</p>
+        </div>
+
+        <div class="sb-fields">
+            <div class="sb-label">📋 Fields <span class="n-badge" id="fieldCount">0</span></div>
+            <div id="fieldList"></div>
+        </div>
+
+        <div class="sb-detail" id="detailSection" style="display:none">
+            <div class="sb-label">📌 Selected Field</div>
+            <div id="fieldDetail"></div>
+        </div>
+
+        <div class="sb-storage">
+            <div class="stor-track">
+                <div class="stor-fill" id="storageBar"></div>
+            </div>
+            <div class="stor-lbl" id="storageLabel">💾 Storage: 0 KB / 5120 KB</div>
+        </div>
+
+        <div class="sb-footer">
+            <button class="sb-ftn" onclick="switchTab('dashboard')">📊<span>Dashboard</span></button>
+            <button class="sb-ftn" onclick="openModal('modalExport')">⬇️<span>Export</span></button>
+            <button class="sb-ftn" onclick="openModal('modalAbout')">ℹ️<span>About</span></button>
+            <button class="sb-ftn" onclick="openSetup()">⚙️<span>Setup</span></button>
+        </div>
+    </aside>
+
+    <main class="app-main">
+        <nav class="tab-bar">
+            <button class="tab active" id="tab-map" onclick="switchTab('map')">🗺️ Map</button>
+            <button class="tab" id="tab-dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
+            <button class="tab" id="tab-rotation" onclick="switchTab('rotation')">🔄 Rotation</button>
+            <button class="tab" id="tab-reports" onclick="switchTab('reports')">📄 Reports</button>
+            <button class="tab" id="tab-analytics" onclick="switchTab('analytics')">📈 Analytics</button>
+        </nav>
+
+        <div class="tab-panel active" id="panel-map">
+            <div id="map"></div>
+            <button class="sb-expand-btn" id="sbExpandBtn" onclick="toggleSidebar()" title="Show sidebar">☰</button>
+            <div class="map-statusbar">
+                <button class="map-menu-btn" onclick="toggleSidebar()">☰</button>
+                <div class="map-status-text" id="statusMsg">🌿 Select a field or use Draw / Auto-split</div>
+                <div class="map-stats">
+                    <span class="stat-item">🌾 <span id="sFields">0</span></span>
+                    <span class="stat-divider">|</span>
+                    <span class="stat-item">📐 <span id="sHa">0 ha</span></span>
+                    <span class="stat-divider">|</span>
+                    <span class="stat-item">🐄 <span id="sGrazing">—</span></span>
+                    <span class="stat-divider">|</span>
+                    <span class="stat-item">✅ <span id="sReady">0</span></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-dashboard">
+            <div class="sv">
+                <div class="kpi-row" id="dashGrid"></div>
+                <div class="cr dash-top-cr">
+                    <div class="card" id="dashFieldChart"></div>
+                    <div class="card cfw" id="dashRainfall"></div>
+                </div>
+                <div class="cr">
+                    <div class="card clg" id="dashFieldStatus"></div>
+                    <div class="card" id="dashAnimalGroups"></div>
+                </div>
+                <div class="cr">
+                    <div class="card clg" id="dashRecentEvents"></div>
+                    <div class="card" id="dashStocking"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-rotation">
+            <div class="sv">
+                <div class="rotation-hero" id="rotationHero"></div>
+                <div class="rotation-list" id="rotationList"></div>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-reports">
+            <div class="sv" id="reportsPage"></div>
+        </div>
+
+        <div class="tab-panel" id="panel-analytics">
+            <div class="sv">
+                <div class="analytics-header">
+                    <h2>📊 Advanced Farm Analytics</h2>
+                    <p>Comprehensive data visualization, weather insights, and grazing metrics</p>
+                </div>
+                <div id="analyticsContent">Loading analytics...</div>
+            </div>
+        </div>
+    </main>
+
+    <div class="overlay" id="modalAutoSplit" style="display:none">
+        <div class="modal mxl as-layout">
+            <div class="mh">
+                <div class="mh-title">⬡ Auto-split farm into camps</div>
+                <button class="mh-close" onclick="closeAutoSplit()">✕</button>
+            </div>
+            <div class="mb as-mb">
+                <div id="asMap" class="as-map-wrap" style="width:100%;height:400px;border:1px solid #ddd;border-radius:6px;"></div>
+                <div id="asControlPanel" class="as-panel" style="margin-top:15px;"></div>
+            </div>
+            <div class="mf">
+                <button class="btn-ghost" onclick="closeAutoSplit()">Cancel</button>
+                <button class="btn-primary" id="asSaveBtn" onclick="asSave()">✓ Create camps</button>
+            </div>
+        </div>
+    </div>
+    <div class="overlay" id="modalName" style="display:none">
+        <div class="modal msm">
+            <div class="mh">
+                <div class="mh-title">✏️ Name your field</div>
+            </div>
+            <div class="mb">
+                <div class="fg"><label>Field name</label><input type="text" id="inName" placeholder="e.g. North Paddock" maxlength="40"></div>
+                <div class="frow">
+                    <div class="fg"><label>Type</label><select id="inType"><option value="pasture">🌿 Pasture</option><option value="hay">🌾 Hay</option><option value="crop">🌽 Crop</option><option value="other">Other</option></select></div>
+                    <div class="fg"><label>Rest target (days)</label><input type="number" id="inRest" value="42" min="1" max="365"></div>
+                </div>
+                <div class="fg"><label>Max AU/ha</label><input type="number" id="inMaxAU" placeholder="e.g. 2.5" step="0.1"></div>
+            </div>
+            <div class="mf"><button class="btn-ghost" onclick="cancelDraw()">Cancel</button><button class="btn-primary" onclick="saveNewField()">Save field</button></div>
+        </div>
+    </div>
+    <div class="overlay" id="modalEditField" style="display:none">
+        <div class="modal msm">
+            <div class="mh">
+                <div class="mh-title">✎ Edit field</div><button class="mh-close" onclick="closeModal('modalEditField')">✕</button></div>
+            <div class="mb"><input type="hidden" id="editFieldId">
+                <div class="fg"><label>Field name</label><input type="text" id="editName" maxlength="40"></div>
+                <div class="frow">
+                    <div class="fg"><label>Type</label><select id="editType"><option value="pasture">Pasture</option><option value="hay">Hay</option><option value="crop">Crop</option><option value="other">Other</option></select></div>
+                    <div class="fg"><label>Rest target (days)</label><input type="number" id="editRest" min="1" max="365"></div>
+                </div>
+                <div class="fg"><label>Max AU/ha</label><input type="number" id="editMaxAU" step="0.1"></div>
+                <div class="fg"><label>Colour</label>
+                    <div class="color-swatches" id="editColorPicker"></div>
+                </div>
+            </div>
+            <div class="mf"><button class="btn-ghost" onclick="closeModal('modalEditField')">Cancel</button><button class="btn-primary" onclick="saveFieldEdit()">Save</button></div>
+        </div>
+    </div>
+    <div class="overlay" id="modalGrazing" style="display:none">
+        <div class="modal msm">
+            <div class="mh">
+                <div class="mh-title">🐄 Log Grazing Event</div><button class="mh-close" onclick="closeModal('modalGrazing')">✕</button></div>
+            <div class="mb">
+                <div class="fg"><label>Field</label><select id="gField"></select></div>
+                <div id="gGroupPicker" style="margin:10px 0;"></div>
+                <div id="gManualInputs" style="display:none;">
+                    <div class="frow">
+                        <div class="fg"><label>Animal type</label><select id="gAnimalType"><option value="cattle">🐄 Cattle</option><option value="sheep">🐑 Sheep</option><option value="goats">🐐 Goats</option><option value="horses">🐎 Horses</option><option value="pigs">🐷 Pigs</option><option value="mixed">🐾 Mixed</option></select></div>
+                        <div class="fg"><label>Number</label><input type="number" id="gCount" min="1"></div>
+                    </div>
+                    <div class="fg"><label>Herd name</label><input type="text" id="gHerd"></div>
+                </div>
+                <div class="frow">
+                    <div class="fg"><label>Start date</label><input type="date" id="gStart"></div>
+                    <div class="fg"><label>End date</label><input type="date" id="gEnd"></div>
+                </div>
+                <div class="fg"><label>Notes</label><textarea id="gNotes" rows="2"></textarea></div>
+                <div id="stockingWarning" class="warn-box" style="display:none"></div>
+            </div>
+            <div class="mf"><button class="btn-ghost" onclick="closeModal('modalGrazing')">Cancel</button><button class="btn-primary" onclick="saveGrazingEvent()">Save event</button></div>
+        </div>
+    </div>
+    <div class="overlay" id="modalGroup" style="display:none">
+        <div class="modal msm">
+            <div class="mh">
+                <div class="mh-title" id="groupModalTitle">🐄 Add animal group</div><button class="mh-close" onclick="closeModal('modalGroup')">✕</button></div>
+            <div class="mb"><input type="hidden" id="groupEditId">
+                <div class="fg"><label>Group name</label><input type="text" id="groupName" maxlength="40"></div>
+                <div class="frow">
+                    <div class="fg"><label>Animal type</label><select id="groupType"><option value="cattle">🐄 Cattle</option><option value="sheep">🐑 Sheep</option><option value="goats">🐐 Goats</option><option value="horses">🐎 Horses</option><option value="pigs">🐷 Pigs</option><option value="mixed">🐾 Mixed</option></select></div>
+                    <div class="fg"><label>Number</label><input type="number" id="groupCount" min="1"></div>
+                </div>
+                <div class="fg"><label>Herd name</label><input type="text" id="groupHerd" maxlength="40"></div>
+            </div>
+            <div class="mf"><button class="btn-ghost" onclick="closeModal('modalGroup')">Cancel</button><button class="btn-primary" onclick="saveGroup()">Save group</button></div>
+        </div>
+    </div>
+    <div class="overlay" id="modalHistory" style="display:none">
+        <div class="modal mlg">
+            <div class="mh">
+                <div class="mh-title">📋 Grazing History</div><button class="mh-close" onclick="closeModal('modalHistory')">✕</button></div>
+            <div class="mb" id="historyBody"></div>
+            <div class="mf"><button class="btn-ghost" onclick="closeModal('modalHistory')">Close</button><button class="btn-primary" onclick="historyAddEvent()">+ Add Event</button></div>
+        </div>
+    </div>
+    <div class="overlay" id="modalExport" style="display:none">
+        <div class="modal msm">
+            <div class="mh">
+                <div class="mh-title">⬇️ Export &amp; Backup</div><button class="mh-close" onclick="closeModal('modalExport')">✕</button></div>
+            <div class="mb"><button class="exp-row" onclick="exportJSON()">💾 JSON backup</button><button class="exp-row" onclick="exportGeoJSON()">🗺️ GeoJSON fields</button><button class="exp-row" onclick="exportCSV()">📊 Events CSV</button><label class="exp-row">⬆️ Import JSON<input type="file" accept=".json" onchange="importJSON(event)" style="display:none"></label>
+                <button class="danger-btn" onclick="clearAllData()">⚠️ Clear all data</button>
+            </div>
+            <div class="mf"><button class="btn-ghost" onclick="closeModal('modalExport')">Close</button></div>
+        </div>
+    </div>
+    <div class="overlay" id="modalAbout" style="display:none">
+        <div class="modal msm">
+            <div class="mh">
+                <div class="mh-title">🌾 About GrazingTrack</div><button class="mh-close" onclick="closeModal('modalAbout')">✕</button></div>
+            <div class="mb">
+                <p>Free open source rotational grazing management. All data stays on your device.</p>
+            </div>
+            <div class="mf"><button class="btn-primary" onclick="closeModal('modalAbout')">Close</button></div>
+        </div>
+    </div>
+    <div class="overlay" id="modalSetup" style="display:none">
+        <div class="modal setup-modal">
+            <div class="setup-header">
+                <div class="setup-logo">🌾 GrazingTrack Setup</div>
+            </div>
+            <div class="setup-progress-track">
+                <div class="setup-progress-fill" id="setupProgress"></div>
+            </div>
+            <div class="setup-title" id="setupTitle">Welcome</div>
+            <div class="setup-body" id="setupBody"></div>
+            <div class="setup-nav"><button class="btn-ghost" id="setupBack" onclick="setupBack()" style="display:none">← Back</button><button class="setup-skip" onclick="closeSetup(false)">Skip</button><button class="btn-primary" id="setupNext" onclick="setupNext()">Next →</button></div>
+        </div>
+    </div>
+
+    <div class="install-banner" id="installBanner" onclick="installApp()">📲 Install GrazingTrack</div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <script>
+        // ============================================================
+        // COMPLETE GRAZINGTRACK APPLICATION
+        // ============================================================
+
+        'use strict';
+
+        // ── CONSTANTS ────────────────────────────────────────────────
+        const DB_VERSION = 4;
+        const COLORS = ['#2d6a4f', '#52b788', '#40916c', '#74c69d', '#1b4332', '#34a0a4', '#0077b6', '#7b2d8b', '#d97706', '#dc2626', '#0891b2', '#059669', '#7c3aed', '#db2777', '#b45309'];
+        let colorIdx = 0;
+        let charts = {};
+
+        function nextColor() {
+            return COLORS[colorIdx++ % COLORS.length];
+        }
+
+        function uid() {
+            return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+        }
+
+        function todayStr() {
+            return new Date().toISOString().slice(0, 10);
+        }
+
+        function addDays(d, n) {
+            let dt = new Date(d);
+            dt.setDate(dt.getDate() + n);
+            return dt.toISOString().slice(0, 10);
+        }
+
+        function daysBetween(a, b) {
+            return Math.max(0, Math.round((new Date(b) - new Date(a)) / 86400000));
+        }
+
+        function daysSince(d) {
+            return daysBetween(d, todayStr());
+        }
+
+        function fmtDate(s) {
+            let [y, m, d] = s.split('-');
+            return `${d}/${m}/${y}`;
+        }
+
+        function cap(s) {
+            return s.charAt(0).toUpperCase() + s.slice(1);
+        }
+
+        // ── STORAGE ──────────────────────────────────────────────────
+        function load(k) {
+            try {
+                let r = localStorage.getItem(k);
+                return r ? JSON.parse(r) : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function save(k, v) {
+            try {
+                localStorage.setItem(k, JSON.stringify(v));
+                updateStorageBar();
+            } catch (e) {
+                if (e.name === 'QuotaExceededError') alert('Storage full!');
+            }
+        }
+        const loadFields = () => load('gt_fields');
+        const loadEvents = () => load('gt_events');
+        const loadGroups = () => load('gt_groups');
+        const saveFields = f => save('gt_fields', f);
+        const saveEvents = e => save('gt_events', e);
+        const saveGroups = g => save('gt_groups', g);
+
+        function getStorageUsage() {
+            let t = 0;
+            ['gt_fields', 'gt_events', 'gt_groups'].forEach(k => {
+                let v = localStorage.getItem(k);
+                if (v) t += v.length * 2;
+            });
+            return {
+                used: t,
+                max: 5 * 1024 * 1024,
+                pct: Math.min(100, t / (5 * 1024 * 1024) * 100)
+            };
+        }
+
+        function updateStorageBar() {
+            let {
+                used,
+                pct
+            } = getStorageUsage();
+            let b = document.getElementById('storageBar'),
+                l = document.getElementById('storageLabel');
+            if (!b) return;
+            b.style.width = pct.toFixed(1) + '%';
+            b.style.background = pct > 80 ? '#ef4444' : pct > 50 ? '#f59e0b' : '#10b981';
+            l.textContent = `💾 Storage: ${(used/1024).toFixed(1)} KB / 5120 KB`;
+        }
+
+        // ── AREA CALCULATION ─────────────────────────────────────────
+        function calcAreaHa(geometry) {
+            if (!geometry) return 0;
+            if (geometry.type === 'MultiPolygon') return geometry.coordinates.reduce((s, ring) => s + calcAreaHa({
+                type: 'Polygon',
+                coordinates: ring
+            }), 0);
+            if (geometry.type !== 'Polygon') return 0;
+            let coords = geometry.coordinates[0],
+                R = 6371000,
+                area = 0;
+            for (let i = 0; i < coords.length - 1; i++) {
+                let [lng1, lat1] = coords[i], [lng2, lat2] = coords[i + 1];
+                let x1 = lng1 * Math.PI / 180 * R * Math.cos(lat1 * Math.PI / 180);
+                let y1 = lat1 * Math.PI / 180 * R;
+                let x2 = lng2 * Math.PI / 180 * R * Math.cos(lat2 * Math.PI / 180);
+                let y2 = lat2 * Math.PI / 180 * R;
+                area += x1 * y2 - x2 * y1;
+            }
+            return Math.abs(area / 2) / 10000;
+        }
+
+        function getFarmCenter() {
+            let fields = loadFields();
+            if (!fields.length) return null;
+            let lats = [],
+                lngs = [];
+            fields.forEach(f => f.geometry.coordinates[0].forEach(([lng, lat]) => {
+                lats.push(lat);
+                lngs.push(lng);
+            }));
+            return {
+                lat: (Math.min(...lats) + Math.max(...lats)) / 2,
+                lng: (Math.min(...lngs) + Math.max(...lngs)) / 2
+            };
+        }
+
+        // ── MAP STATE ────────────────────────────────────────────────
+        let map, drawnItems, drawControl;
+        let pendingLayer = null,
+            selectedFieldId = null,
+            currentTool = 'select',
+            vertexCount = 0;
+
+        let ndviLayer = null,
+            ndviActive = false;
+        let heatmapActive = false; // <-- ADDED: Heatmap toggle state
+
+        function _ndviRecentDate() {
+            const d = new Date();
+            d.setDate(d.getDate() - 21);
+            return d.toISOString().slice(0, 10);
+        }
+
+        function toggleNDVIPanel() {
+            const panel = document.getElementById('ndviPanel');
+            const btn = document.getElementById('btnNDVI');
+            if (!panel) return;
+            ndviActive = !ndviActive;
+            panel.style.display = ndviActive ? 'block' : 'none';
+            if (btn) btn.classList.toggle('active', ndviActive);
+            if (ndviActive) {
+                if (heatmapActive) togglePressureHeatmap(); // Disable heatmap if active
+
+                const dateInput = document.getElementById('ndviDate');
+                if (dateInput && !dateInput.value) dateInput.value = _ndviRecentDate();
+                applyNDVI();
+                setStatus('Satellite view active');
+            } else {
+                if (ndviLayer && map && map.hasLayer(ndviLayer)) map.removeLayer(ndviLayer);
+                ndviLayer = null;
+                setStatus('Ready');
+            }
+        }
+
+        function applyNDVI() {
+            if (ndviLayer && map && map.hasLayer(ndviLayer)) map.removeLayer(ndviLayer);
+            const dateInput = document.getElementById('ndviDate');
+            const opacityInput = document.getElementById('ndviOpacity');
+            const date = dateInput ? dateInput.value : _ndviRecentDate();
+            const opacity = opacityInput ? parseFloat(opacityInput.value) : 0.7;
+            ndviLayer = L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_8Day/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`, {
+                attribution: '🛰 NASA GIBS',
+                maxNativeZoom: 9,
+                maxZoom: 20,
+                opacity: opacity,
+                tileSize: 256
+            });
+            ndviLayer.addTo(map);
+            ndviLayer.on('tileerror', () => setStatus('⚠ NDVI tiles unavailable for this date.'));
+        }
+
+        // ── ADDED: Heatmap Layer Functions ─────────────────────────
+        function togglePressureHeatmap() {
+            heatmapActive = !heatmapActive;
+            const btn = document.getElementById('btnHeatmap');
+            if (btn) btn.classList.toggle('active', heatmapActive);
+
+            if (heatmapActive) {
+                if (typeof ndviActive !== 'undefined' && ndviActive) toggleNDVIPanel();
+                applyPressureHeatmap();
+                setStatus('🔥 Grazing Pressure Heatmap active (Past 12 months)');
+            } else {
+                refreshMapColors();
+                setStatus('Ready');
+            }
+        }
+
+        function applyPressureHeatmap() {
+            const fields = loadFields();
+            const events = loadEvents();
+            const oneYearAgo = new Date();
+            oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+            const oneYearAgoStr = oneYearAgo.toISOString().slice(0, 10);
+
+            let maxPressure = 0.0001;
+            const fieldPressures = {};
+
+            fields.forEach(f => {
+                const fEvents = events.filter(e => e.fieldId === f.id && e.endDate >= oneYearAgoStr);
+                let totalAnimalDays = 0;
+                fEvents.forEach(e => {
+                    const start = e.startDate < oneYearAgoStr ? oneYearAgoStr : e.startDate;
+                    totalAnimalDays += (e.animalCount * daysBetween(start, e.endDate));
+                });
+                const density = f.areaHa > 0 ? (totalAnimalDays / f.areaHa) : 0;
+                fieldPressures[f.id] = density;
+                if (density > maxPressure) maxPressure = density;
+            });
+
+            if (drawnItems) {
+                drawnItems.eachLayer(layer => {
+                    if (layer.options && layer.options.fieldId) {
+                        const density = fieldPressures[layer.options.fieldId] || 0;
+                        const ratio = density / maxPressure;
+                        const r = ratio < 0.5 ? Math.round(255 * (ratio * 2)) : 255;
+                        const g = ratio > 0.5 ? Math.round(255 * (1 - (ratio - 0.5) * 2)) : 255;
+                        const color = `rgb(${r}, ${g}, 0)`;
+
+                        layer.setStyle({
+                            fillColor: color,
+                            fillOpacity: 0.8,
+                            color: '#ffffff',
+                            weight: 2
+                        });
+
+                        const tt = layer.getTooltip();
+                        if (tt) {
+                            layer.bindTooltip(`<strong>${tt.getContent().split('<br>')[0].replace(/<[^>]+>/g, '')}</strong><br>${density.toFixed(0)} Animal-Days/ha`, {
+                                permanent: false
+                            });
+                        }
+                    }
+                });
+            }
+        }
+
+        function setStatus(msg) {
+            let el = document.getElementById('statusMsg');
+            if (el) el.textContent = msg;
+        }
+
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false
+            }).setView([-29, 25], 6);
+            const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles © Esri',
+                maxZoom: 19
+            });
+            const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap',
+                maxZoom: 19
+            });
+            // NEW: Topography layer added
+            const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                maxZoom: 17,
+                attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap'
+            });
+
+            sat.addTo(map);
+            L.control.layers({
+                '🛰 Satellite': sat,
+                '🗺 Street map': osm,
+                '⛰️ Topography': topo
+            }, {}, {
+                position: 'topright'
+            }).addTo(map);
+            L.control.zoom({
+                position: 'topright'
+            }).addTo(map);
+
+            drawnItems = new L.FeatureGroup().addTo(map);
+            drawControl = new L.Control.Draw({
+                position: 'topright',
+                draw: {
+                    polygon: {
+                        allowIntersection: false,
+                        showArea: true,
+                        shapeOptions: {
+                            color: '#10b981',
+                            fillColor: '#10b981',
+                            fillOpacity: .25,
+                            weight: 2.5
+                        }
+                    },
+                    rectangle: false,
+                    circle: false,
+                    circlemarker: false,
+                    marker: false,
+                    polyline: false
+                },
+                edit: {
+                    featureGroup: drawnItems,
+                    remove: false
+                }
+            });
+
+            map.on(L.Draw.Event.CREATED, e => {
+                pendingLayer = e.layer;
+                drawnItems.addLayer(pendingLayer);
+                vertexCount = 0;
+                updateUndoBtn();
+                openModal('modalName');
+                setTimeout(() => {
+                    let inp = document.getElementById('inName');
+                    if (inp) inp.focus();
+                }, 80);
+            });
+            map.on('draw:drawvertex', e => {
+                let pts = [];
+                e.layers.eachLayer(l => pts.push(l.getLatLng()));
+                vertexCount = pts.length;
+                updateUndoBtn();
+                if (pts.length >= 3) {
+                    let geo = {
+                        type: 'Polygon',
+                        coordinates: [
+                            [...pts, pts[0]].map(p => [p.lng, p.lat])
+                        ]
+                    };
+                    setStatus(`Drawing — ${pts.length} pts · ~${calcAreaHa(geo).toFixed(1)} ha · double-click to finish`);
+                } else setStatus(`Drawing — ${pts.length} pt${pts.length!==1?'s':''} placed · need at least 3`);
+            });
+            map.on(L.Draw.Event.EDITED, e => {
+                e.layers.eachLayer(layer => {
+                    let fields = loadFields(),
+                        field = fields.find(f => f.id === layer.options.fieldId);
+                    if (field) {
+                        field.geometry = layer.toGeoJSON().geometry;
+                        field.areaHa = calcAreaHa(field.geometry);
+                        saveFields(fields);
+                    }
+                });
+                renderFieldList();
+                updateStats();
+                if (selectedFieldId) selectField(selectedFieldId);
+                setTool('select');
+            });
+            map.on(L.Draw.Event.EDITSTOP, () => setTool('select'));
+            map.on('click', () => {
+                if (currentTool === 'select') deselectField();
+            });
+
+            restoreFieldsOnMap();
+            renderFieldList();
+            updateStats();
+            updateStorageBar();
+            checkFirstRun();
+        }
+
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tcrd').forEach(b => b.classList.remove('active'));
+            let ub = document.getElementById('btnUndo'),
+                eb = document.getElementById('btnEdit'),
+                db = document.getElementById('btnDelete');
+            if (tool === 'draw') {
+                document.getElementById('btnDraw').classList.add('active');
+                vertexCount = 0;
+                map.addControl(drawControl);
+                setTimeout(() => {
+                    let b = document.querySelector('.leaflet-draw-draw-polygon');
+                    if (b) b.click();
+                }, 60);
+                document.getElementById('toolHint').textContent = 'Click to place corners · double-click or click first point to close · ↩ to undo';
+                if (eb) eb.style.display = 'none';
+            } else if (tool === 'edit') {
+                document.getElementById('btnEdit').classList.add('active');
+                try {
+                    map.addControl(drawControl);
+                } catch (e) {}
+                setTimeout(() => {
+                    let b = document.querySelector('.leaflet-draw-edit-edit');
+                    if (b) b.click();
+                }, 60);
+                if (ub) ub.style.display = 'none';
+            } else {
+                document.getElementById('btnSelect').classList.add('active');
+                vertexCount = 0;
+                try {
+                    map.removeControl(drawControl);
+                } catch (e) {}
+                setStatus('Select a field or use Draw / Auto-split');
+                document.getElementById('toolHint').textContent = '💡 Click a field on the map to select it';
+                if (ub) ub.style.display = 'none';
+                if (eb) eb.style.display = selectedFieldId ? 'flex' : 'none';
+                if (db) db.style.display = selectedFieldId ? 'flex' : 'none';
+            }
+            updateUndoBtn();
+        }
+
+        function updateUndoBtn() {
+            let b = document.getElementById('btnUndo');
+            if (b) b.style.display = (currentTool === 'draw' && vertexCount > 0) ? 'flex' : 'none';
+        }
+
+        function undoLastVertex() {
+            let evt = new KeyboardEvent('keydown', {
+                key: 'z',
+                ctrlKey: true,
+                bubbles: true
+            });
+            document.dispatchEvent(evt);
+            if (vertexCount > 0) vertexCount--;
+            updateUndoBtn();
+        }
+
+        function cancelDraw() {
+            if (pendingLayer) {
+                drawnItems.removeLayer(pendingLayer);
+                pendingLayer = null;
+            }
+            vertexCount = 0;
+            updateUndoBtn();
+            closeModal('modalName');
+            setTool('select');
+        }
+
+        // Auto-split functions are defined in gt-split.js
+        // openAutoSplit(), closeAutoSplit(), asSave()
+
+        function saveNewField() {
+            let name = document.getElementById('inName').value.trim();
+            if (!name) {
+                alert('Please enter a field name.');
+                return;
+            }
+            if (!pendingLayer) return;
+            let geo = pendingLayer.toGeoJSON().geometry;
+            let field = {
+                id: uid(),
+                name: name,
+                type: document.getElementById('inType').value,
+                restTarget: parseInt(document.getElementById('inRest').value) || 42,
+                maxAUperHa: parseFloat(document.getElementById('inMaxAU').value) || null,
+                geometry: geo,
+                areaHa: calcAreaHa(geo),
+                color: nextColor(),
+                createdAt: new Date().toISOString(),
+                version: DB_VERSION
+            };
+            styleLayer(pendingLayer, field);
+            pendingLayer.options.fieldId = field.id;
+            bindFieldLayer(pendingLayer, field);
+            let fields = loadFields();
+            fields.push(field);
+            saveFields(fields);
+            pendingLayer = null;
+            vertexCount = 0;
+            updateUndoBtn();
+            closeModal('modalName');
+            setTool('select');
+            renderFieldList();
+            updateStats();
+            selectField(field.id);
+            setStatus(`"${name}" saved — ${field.areaHa.toFixed(1)} ha`);
+        }
+
+        function openEditFieldModal(fieldId) {
+            let field = loadFields().find(f => f.id === fieldId);
+            if (!field) return;
+            document.getElementById('editFieldId').value = field.id;
+            document.getElementById('editName').value = field.name;
+            document.getElementById('editType').value = field.type;
+            document.getElementById('editRest').value = field.restTarget;
+            document.getElementById('editMaxAU').value = field.maxAUperHa || '';
+            document.getElementById('editColorPicker').innerHTML = COLORS.map(c => `<div class="color-swatch${c===field.color?' chosen':''}" style="background:${c}" onclick="selectColor(this)" title="${c}"></div>`).join('');
+            openModal('modalEditField');
+            setTimeout(() => document.getElementById('editName').focus(), 80);
+        }
+
+        function selectColor(el) {
+            document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('chosen'));
+            el.classList.add('chosen');
+        }
+
+        function saveFieldEdit() {
+            let id = document.getElementById('editFieldId').value,
+                name = document.getElementById('editName').value.trim();
+            if (!name) {
+                alert('Enter a field name.');
+                return;
+            }
+            let fields = loadFields(),
+                idx = fields.findIndex(f => f.id === id);
+            if (idx === -1) return;
+            let chosen = document.querySelector('.color-swatch.chosen');
+            fields[idx] = {...fields[idx],
+                name: name,
+                type: document.getElementById('editType').value,
+                restTarget: parseInt(document.getElementById('editRest').value) || 42,
+                maxAUperHa: parseFloat(document.getElementById('editMaxAU').value) || null,
+                color: chosen ? chosen.title : fields[idx].color
+            };
+            saveFields(fields);
+            drawnItems.eachLayer(layer => {
+                if (layer.options.fieldId === id) {
+                    styleLayer(layer, fields[idx]);
+                    bindFieldLayer(layer, fields[idx]);
+                }
+            });
+            closeModal('modalEditField');
+            renderFieldList();
+            if (selectedFieldId === id) selectField(id);
+            setStatus(`"${name}" updated.`);
+        }
+
+        function hexToRgb(hex) {
+            let n = parseInt(hex.replace('#', ''), 16);
+            return {
+                r: (n >> 16) & 255,
+                g: (n >> 8) & 255,
+                b: n & 255
+            };
+        }
+
+        function restingColor(hex, t) {
+            let c = hexToRgb(hex),
+                lum = Math.round(0.299 * c.r + 0.587 * c.g + 0.114 * c.b);
+            return `rgb(${Math.round(lum+(c.r-lum)*t)},${Math.round(lum+(c.g-lum)*t)},${Math.round(lum+(c.b-lum)*t)})`;
+        }
+
+        function styleLayer(layer, field) {
+            let fill = statusFillColor(field);
+            layer.setStyle({
+                color: field.color,
+                fillColor: fill,
+                fillOpacity: .42,
+                weight: 2.5
+            });
+        }
+
+        function bindFieldLayer(layer, field) {
+            layer.options.fieldId = field.id;
+            layer.off('click');
+            layer.on('click', e => {
+                L.DomEvent.stopPropagation(e);
+                selectField(field.id);
+            });
+            layer.unbindTooltip();
+            layer.bindTooltip(`<strong>${field.name}</strong><br>${field.areaHa.toFixed(1)} ha`, {
+                permanent: true,
+                direction: 'center',
+                className: 'field-label'
+            });
+        }
+
+        function deleteSelected() {
+            if (!selectedFieldId) return;
+            let field = loadFields().find(f => f.id === selectedFieldId);
+            if (!field || !confirm(`Delete "${field.name}"?\nAll grazing events will also be deleted.`)) return;
+            drawnItems.eachLayer(l => {
+                if (l.options.fieldId === selectedFieldId) drawnItems.removeLayer(l);
+            });
+            saveFields(loadFields().filter(f => f.id !== selectedFieldId));
+            saveEvents(loadEvents().filter(e => e.fieldId !== selectedFieldId));
+            deselectField();
+            renderFieldList();
+            updateStats();
+            setStatus('Field deleted.');
+        }
+
+        function selectField(fieldId) {
+            selectedFieldId = fieldId;
+            let field = loadFields().find(f => f.id === fieldId);
+            if (!field) return;
+            document.querySelectorAll('.field-item').forEach(el => el.classList.toggle('selected', el.dataset.id === fieldId));
+            let events = loadEvents().filter(e => e.fieldId === fieldId).sort((a, b) => b.endDate.localeCompare(a.endDate));
+            let last = events[0],
+                restDays = last ? daysSince(last.endDate) : null,
+                status = getStatus(field);
+            let today = todayStr(),
+                activeEv = events.find(e => e.startDate <= today && e.endDate >= today);
+            let pct = getReadinessPct(field),
+                barClr = pct >= 100 ? '#10b981' : pct >= 60 ? '#f59e0b' : '#9ca3af';
+            let progHTML = `<div class="rest-prog"><div class="rest-prog-fill" style="width:${pct}%;background:${barClr}"></div></div><div class="rest-prog-lbl"><span>Rest progress</span><span>${pct}%${pct<100?' · '+(Math.max(0,field.restTarget-(restDays||0)))+'d left':' · Ready!'}</span></div>`;
+            let stockWarn = '';
+            if (last && field.maxAUperHa) {
+                let auHa = last.animalCount / field.areaHa;
+                if (auHa > field.maxAUperHa) stockWarn = `<div class="warn-box alert" style="margin:6px 0;font-size:11px">⚠ Last event: ${auHa.toFixed(1)} AU/ha exceeds limit of ${field.maxAUperHa} AU/ha</div>`;
+            }
+            let endBtn = activeEv ? `<button class="end-graze-btn" onclick="endGrazingToday('${activeEv.id}','${fieldId}')">⏹ End Grazing Today</button>` : '';
+            document.getElementById('detailSection').style.display = 'block';
+            document.getElementById('fieldDetail').innerHTML = `<div class="detail-row"><span class="detail-key">Area</span><span class="detail-val">${field.areaHa.toFixed(2)} ha</span></div><div class="detail-row"><span class="detail-key">Status</span><span class="detail-val"><span class="pill pill-${status.cls}">${status.label}</span></span></div><div class="detail-row"><span class="detail-key">Rest</span><span class="detail-val">${restDays!==null?restDays+'d / '+field.restTarget+'d':'No events yet'}</span></div>${progHTML}${stockWarn}<div class="detail-actions"><button class="detail-btn edit" onclick="openEditFieldModal('${fieldId}')">✎ Edit</button><button class="detail-btn" onclick="openHistoryModal('${fieldId}')">History</button><button class="detail-btn primary" onclick="openGrazingModal('${fieldId}')">+ Graze</button></div>${endBtn}`;
+            document.getElementById('btnDelete').style.display = 'flex';
+            let eb = document.getElementById('btnEdit');
+            if (eb) eb.style.display = 'flex';
+            drawnItems.eachLayer(l => {
+                if (l.options.fieldId === fieldId) map.fitBounds(l.getBounds(), {
+                    padding: [60, 60],
+                    maxZoom: 17
+                });
+            });
+            setStatus(`${field.name} — ${field.areaHa.toFixed(2)} ha`);
+        }
+
+        function endGrazingToday(eventId, fieldId) {
+            let events = loadEvents(),
+                ev = events.find(e => e.id === eventId);
+            if (!ev) return;
+            let today = todayStr(),
+                days = daysBetween(ev.startDate, today);
+            let field = loadFields().find(f => f.id === fieldId);
+            if (!confirm(`End grazing on ${field?field.name:'this field'} today?\n\n${ev.animalCount} ${ev.animalType} · ${days} day${days!==1?'s':''}\nRest period will start from today.`)) return;
+            ev.endDate = today;
+            saveEvents(events);
+            refreshMapColors();
+            renderFieldList();
+            updateStats();
+            selectField(fieldId);
+            setStatus(`Grazing ended — rest period started today.`);
+        }
+
+        function deselectField() {
+            selectedFieldId = null;
+            document.querySelectorAll('.field-item').forEach(el => el.classList.remove('selected'));
+            document.getElementById('detailSection').style.display = 'none';
+            document.getElementById('btnDelete').style.display = 'none';
+            let eb = document.getElementById('btnEdit');
+            if (eb) eb.style.display = 'none';
+        }
+
+        function getStatus(field) {
+            let events = loadEvents().filter(e => e.fieldId === field.id).sort((a, b) => b.startDate.localeCompare(a.startDate));
+            if (!events.length) return {
+                label: 'Never grazed',
+                cls: 'none'
+            };
+            let latest = events[0],
+                today = todayStr();
+            if (latest.startDate <= today && latest.endDate >= today) return {
+                label: 'Grazing now',
+                cls: 'grazing'
+            };
+            let rest = daysSince(latest.endDate);
+            if (rest < 0) return {
+                label: 'Planned',
+                cls: 'resting'
+            };
+            if (rest >= field.restTarget) return {
+                label: 'Ready',
+                cls: 'ready'
+            };
+            if (rest >= field.restTarget * 0.6) return {
+                label: `${rest}d rest`,
+                cls: 'resting'
+            };
+            return {
+                label: `${rest}d rest`,
+                cls: 'danger'
+            };
+        }
+
+        function getReadinessPct(field) {
+            let events = loadEvents().filter(e => e.fieldId === field.id).sort((a, b) => b.startDate.localeCompare(a.startDate));
+            if (!events.length) return 100;
+            let latest = events[0],
+                today = todayStr();
+            if (latest.startDate <= today && latest.endDate >= today) return 0;
+            return Math.min(100, Math.round(Math.max(0, daysSince(latest.endDate)) / field.restTarget * 100));
+        }
+
+        function statusFillColor(field) {
+            let s = getStatus(field);
+            if (s.cls === 'grazing') return '#10b981';
+            if (s.cls === 'ready') return '#34d399';
+            if (s.cls === 'none') return field.color;
+            let t = Math.max(0, Math.min(1, getReadinessPct(field) / 100));
+            return restingColor(field.color, t);
+        }
+
+        function restoreFieldsOnMap() {
+            let fields = loadFields();
+            if (!fields.length) return;
+            let bounds = [];
+            fields.forEach(field => {
+                let layer = L.geoJSON(field.geometry).getLayers()[0];
+                styleLayer(layer, field);
+                bindFieldLayer(layer, field);
+                drawnItems.addLayer(layer);
+                layer.getLatLngs()[0].forEach(ll => bounds.push(ll));
+            });
+            if (bounds.length) map.fitBounds(L.latLngBounds(bounds), {
+                padding: [50, 50],
+                maxZoom: 16
+            });
+        }
+
+        function refreshMapColors() {
+            let fields = loadFields();
+            drawnItems.eachLayer(layer => {
+                if (!layer.options.fieldId) return;
+                let field = fields.find(f => f.id === layer.options.fieldId);
+                if (field) styleLayer(layer, field);
+            });
+        }
+
+        function renderFieldList() {
+            let fields = loadFields();
+            document.getElementById('fieldCount').textContent = fields.length;
+            let el = document.getElementById('fieldList');
+            if (!fields.length) {
+                el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌾</div><p class="empty-msg">No fields yet</p><p class="empty-sub">Use Draw or Auto-split to add paddocks</p></div>`;
+                return;
+            }
+            el.innerHTML = fields.map(f => {
+                let s = getStatus(f);
+                return `<div class="field-item" data-id="${f.id}" onclick="selectField('${f.id}')"><span class="field-dot" style="background:${f.color}"></span><div class="field-item-info"><div class="field-item-name">${f.name}</div><div class="field-item-meta">${f.areaHa.toFixed(1)} ha · ${cap(f.type)}</div></div><span class="pill pill-${s.cls}">${s.label}</span></div>`;
+            }).join('');
+            if (selectedFieldId) document.querySelectorAll('.field-item').forEach(el => el.classList.toggle('selected', el.dataset.id === selectedFieldId));
+        }
+
+        function updateStats() {
+            let fields = loadFields(),
+                totalHa = fields.reduce((s, f) => s + f.areaHa, 0),
+                statuses = fields.map(f => getStatus(f));
+            document.getElementById('sFields').textContent = fields.length;
+            document.getElementById('sHa').textContent = totalHa.toFixed(1) + ' ha';
+            document.getElementById('sGrazing').textContent = statuses.filter(s => s.cls === 'grazing').length || '—';
+            document.getElementById('sReady').textContent = statuses.filter(s => s.cls === 'ready').length;
+        }
+
+        // ── ANIMAL GROUPS ───────────────────────────────────────────
+        function getGroupEmoji(type) {
+            let m = {
+                cattle: '🐄',
+                sheep: '🐑',
+                goats: '🐐',
+                horses: '🐎',
+                pigs: '🐷',
+                mixed: '🐾'
+            };
+            return m[type] || '🐾';
+        }
+
+        function renderAnimalGroupsCard() {
+            let groups = loadGroups();
+            let html = `<div class="card-title">🐄 Animal Groups <button class="add-group-small" onclick="openGroupModal(null)">+ Add</button></div>`;
+            if (!groups.length) html += `<div style="text-align:center;padding:16px 8px"><p style="color:var(--muted);font-size:13px">No animal groups yet.</p><button class="btn-primary" style="margin-top:10px;width:100%" onclick="openGroupModal(null)">+ Add your first group</button></div>`;
+            else {
+                html += `<div class="groups-list">`;
+                groups.forEach(g => {
+                    html += `<div class="group-item"><div class="group-icon">${getGroupEmoji(g.type)}</div><div class="group-info"><div class="group-name">${g.name}</div><div class="group-detail">${g.count} ${g.type}${g.herd?' · '+g.herd:''}</div></div><div class="group-actions"><button class="group-edit" onclick="openGroupModal('${g.id}')">✎</button><button class="group-delete" onclick="deleteGroup('${g.id}')">✕</button></div></div>`;
+                });
+                html += `</div>`;
+            }
+            let el = document.getElementById('dashAnimalGroups');
+            if (el) el.innerHTML = html;
+        }
+
+        function openGroupModal(id) {
+            let groups = loadGroups(),
+                g = id ? groups.find(x => x.id === id) : null;
+            document.getElementById('groupModalTitle').textContent = g ? '✎ Edit group' : '🐄 Add animal group';
+            document.getElementById('groupEditId').value = g ? g.id : '';
+            document.getElementById('groupName').value = g ? g.name : '';
+            document.getElementById('groupType').value = g ? g.type : 'cattle';
+            document.getElementById('groupCount').value = g ? g.count : '';
+            document.getElementById('groupHerd').value = g ? (g.herd || '') : '';
+            openModal('modalGroup');
+            setTimeout(() => document.getElementById('groupName').focus(), 80);
+        }
+
+        function saveGroup() {
+            let name = document.getElementById('groupName').value.trim(),
+                type = document.getElementById('groupType').value,
+                count = parseInt(document.getElementById('groupCount').value),
+                herd = document.getElementById('groupHerd').value.trim(),
+                editId = document.getElementById('groupEditId').value;
+            if (!name) {
+                alert('Enter a group name.');
+                return;
+            }
+            if (!count || count < 1) {
+                alert('Enter a valid number of animals.');
+                return;
+            }
+            let groups = loadGroups(),
+                savedId = editId;
+            if (editId) {
+                let idx = groups.findIndex(g => g.id === editId);
+                if (idx !== -1) groups[idx] = {...groups[idx],
+                    name,
+                    type,
+                    count,
+                    herd
+                };
+            } else {
+                savedId = uid();
+                groups.push({
+                    id: savedId,
+                    name,
+                    type,
+                    count,
+                    herd
+                });
+            }
+            saveGroups(groups);
+            closeModal('modalGroup');
+            renderAnimalGroupsCard();
+            renderGroupPicker(); // Refresh the picker in grazing modal
+        }
+
+        function deleteGroup(id) {
+            let groups = loadGroups(),
+                g = groups.find(x => x.id === id);
+            if (!g || !confirm(`Delete group "${g.name}"?`)) return;
+            saveGroups(groups.filter(x => x.id !== id));
+            renderAnimalGroupsCard();
+            renderGroupPicker();
+        }
+
+        // ── GRAZING EVENTS WITH WORKING GROUP SELECTOR ───────────────
+        function renderGroupPicker() {
+            let groups = loadGroups();
+            let container = document.getElementById('gGroupPicker');
+            if (!container) return;
+
+            if (groups.length === 0) {
+                container.innerHTML = `<div style="padding:12px; background:#fef9c3; border-radius:8px; text-align:center;">
+                    <p style="font-size:12px; margin-bottom:8px;">No animal groups yet.</p>
+                    <button class="btn-primary" style="padding:6px 12px; font-size:11px;" onclick="openGroupModal(null); setTimeout(renderGroupPicker, 500)">+ Create a group</button>
+                    <p style="font-size:10px; margin-top:8px; color:var(--muted);">Or enter details manually below</p>
+                </div>`;
+                return;
+            }
+
+            container.innerHTML = `
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:11px; font-weight:600; display:block; margin-bottom:6px;">📋 Select a saved group (auto-fills details)</label>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                        ${groups.map(g => `
+                            <button type="button" class="group-select-btn" data-group-id="${g.id}" 
+                                style="padding:8px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg-card); cursor:pointer; display:flex; align-items:center; gap:8px; transition:all 0.2s;"
+                                onmouseover="this.style.borderColor='#10b981'; this.style.transform='translateY(-1px)'"
+                                onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'"
+                                onclick="selectGroup('${g.id}')">
+                                <span style="font-size:18px;">${getGroupEmoji(g.type)}</span>
+                                <div style="text-align:left;">
+                                    <div style="font-weight:700; font-size:12px;">${g.name}</div>
+                                    <div style="font-size:9px; color:var(--muted);">${g.count} ${g.type}${g.herd ? ' · ' + g.herd : ''}</div>
+                                </div>
+                            </button>
+                        `).join('')}
+                        <button type="button" class="group-select-btn" onclick="selectManualEntry()"
+                            style="padding:8px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--bg-card); cursor:pointer; display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:18px;">✎</span>
+                            <div style="text-align:left;">
+                                <div style="font-weight:700; font-size:12px;">Manual Entry</div>
+                                <div style="font-size:9px; color:var(--muted);">Enter details below</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+                <div id="selectedGroupDisplay" style="margin-top:8px;"></div>
+            `;
+        }
+        
+        function selectGroup(groupId) {
+            let groups = loadGroups();
+            let group = groups.find(g => g.id === groupId);
+            if (!group) return;
+            
+            // Highlight selected button
+            document.querySelectorAll('.group-select-btn').forEach(btn => {
+                btn.style.background = btn.dataset.groupId === groupId ? '#ecfdf5' : 'var(--bg-card)';
+                btn.style.borderColor = btn.dataset.groupId === groupId ? '#10b981' : 'var(--border)';
+            });
+            
+            // Fill the form
+            document.getElementById('gAnimalType').value = group.type;
+            document.getElementById('gCount').value = group.count;
+            document.getElementById('gHerd').value = group.herd || '';
+            
+            // Show manual inputs and display selected info
+            document.getElementById('gManualInputs').style.display = 'block';
+            let displayDiv = document.getElementById('selectedGroupDisplay');
+            if (displayDiv) {
+                displayDiv.innerHTML = `<div style="padding:8px 12px; background:#ecfdf5; border-radius:8px; font-size:12px;">
+                    ✅ Using group: <strong>${group.name}</strong> (${group.count} ${group.type})
+                </div>`;
+            }
+        }
+        
+        function selectManualEntry() {
+            // Reset button highlights
+            document.querySelectorAll('.group-select-btn').forEach(btn => {
+                btn.style.background = 'var(--bg-card)';
+                btn.style.borderColor = 'var(--border)';
+            });
+            
+            // Clear the form
+            document.getElementById('gAnimalType').value = 'cattle';
+            document.getElementById('gCount').value = '';
+            document.getElementById('gHerd').value = '';
+            
+            // Show manual inputs and clear display
+            document.getElementById('gManualInputs').style.display = 'block';
+            let displayDiv = document.getElementById('selectedGroupDisplay');
+            if (displayDiv) displayDiv.innerHTML = '';
+        }
+
+        function openGrazingModal(preFieldId) {
+            let fields = loadFields(); 
+            if (!fields.length) { alert('Add a field first.'); return; }
+            
+            document.getElementById('gField').innerHTML = fields.map(f => `<option value="${f.id}"${f.id===preFieldId?' selected':''}>${f.name}</option>`).join('');
+            let today = todayStr(); 
+            document.getElementById('gStart').value = today; 
+            document.getElementById('gEnd').value = addDays(today, 7);
+            document.getElementById('gAnimalType').value = 'cattle'; 
+            document.getElementById('gCount').value = ''; 
+            document.getElementById('gHerd').value = ''; 
+            document.getElementById('gNotes').value = '';
+            document.getElementById('gManualInputs').style.display = 'block';
+            document.getElementById('stockingWarning').style.display = 'none';
+            
+            // Render the group picker
+            renderGroupPicker();
+            
+            openModal('modalGrazing');
+            setTimeout(() => document.getElementById('gCount').focus(), 120);
+        }
+
+        function saveGrazingEvent() {
+            let fieldId = document.getElementById('gField').value, start = document.getElementById('gStart').value, end = document.getElementById('gEnd').value;
+            let type = document.getElementById('gAnimalType').value.trim(), count = parseInt(document.getElementById('gCount').value);
+            let herd = document.getElementById('gHerd').value.trim(), notes = document.getElementById('gNotes').value.trim();
+            
+            if (!start || !end) { alert('Enter start and end dates.'); return; }
+            if (end < start) { alert('End date must be on or after start date.'); return; }
+            if (!type) { alert('Select a group or choose an animal type.'); return; }
+            if (!count || count < 1) { alert('Enter the number of animals.'); return; }
+            
+            let events = loadEvents(); 
+            events.push({ id: uid(), fieldId, startDate: start, endDate: end, animalType: type, animalCount: count, herd, notes, loggedAt: new Date().toISOString() });
+            saveEvents(events); 
+            closeModal('modalGrazing'); 
+            refreshMapColors(); 
+            renderFieldList(); 
+            updateStats();
+            
+            if (selectedFieldId === fieldId) selectField(fieldId);
+            let field = loadFields().find(f => f.id === fieldId); 
+            setStatus(`Logged: ${count} ${type}${herd?' ('+herd+')':''} on "${field?field.name:'?'}" — ${daysBetween(start,end)} days`);
+        }
+
+        let historyFieldId = null;
+        function openHistoryModal(fieldId) {
+            historyFieldId = fieldId; let field = loadFields().find(f => f.id === fieldId), events = loadEvents().filter(e => e.fieldId === fieldId).sort((a, b) => b.startDate.localeCompare(a.startDate));
+            document.getElementById('historyTitle').textContent = `${field.name} — Grazing History`;
+            document.getElementById('historyBody').innerHTML = !events.length ? '<p style="color:var(--muted)">No events yet.</p>' : `<table class="htbl"><thead><tr><th>Start</th><th>End</th><th>Days</th><th>Animals</th><th>AU/ha</th><th>Notes</th><th></th></tr></thead><tbody>${events.map(e => { let auHa = field.areaHa > 0 ? (e.animalCount / field.areaHa).toFixed(1) : '—'; let warn = field.maxAUperHa && (e.animalCount / field.areaHa) > field.maxAUperHa ? '⚠' : ''; return `<tr><td>${fmtDate(e.startDate)}</td><td>${fmtDate(e.endDate)}</td><td>${daysBetween(e.startDate, e.endDate)}</td><td>${e.animalCount} ${cap(e.animalType)}${e.herd ? '<br><span style="font-size:9px;">('+e.herd+')</span>' : ''}</td><td>${warn}${auHa}</td><td style="color:#6b7280;font-size:11px">${e.notes || '—'}</td><td><button class="del-ev-btn" onclick="deleteEvent('${e.id}','${fieldId}')">✕</button></td></tr>`; }).join('')}</tbody></table>`;
+            openModal('modalHistory');
+        }
+
+        function deleteEvent(eventId, fieldId) { if (!confirm('Delete event?')) return; saveEvents(loadEvents().filter(e => e.id !== eventId)); refreshMapColors(); renderFieldList(); updateStats(); openHistoryModal(fieldId); if (selectedFieldId === fieldId) selectField(fieldId); }
+        function historyAddEvent() { closeModal('modalHistory'); openGrazingModal(historyFieldId); }
+
+        // ── WEATHER / RAINFALL API ───────────────────────────────────
+        async function fetchRainfall(lat, lng, containerId) {
+            try {
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&past_days=14&forecast_days=7&timezone=auto`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                const daily = data.daily;
+                
+                let totalRain = 0;
+                for (let i = 0; i < daily.time.length && i < 14; i++) {
+                    totalRain += daily.precipitation_sum[i] || 0;
+                }
+                
+                let forecastHtml = '<div style="display:flex; gap:8px; overflow-x:auto; padding:8px 0;">';
+                for (let i = 0; i < 7 && i < daily.time.length; i++) {
+                    const date = new Date(daily.time[i]);
+                    const isToday = i === 0;
+                    const dayName = isToday ? 'Today' : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
+                    const rain = daily.precipitation_sum[i] || 0;
+                    const prob = daily.precipitation_probability_max[i] || 0;
+                    const tempMax = Math.round(daily.temperature_2m_max[i] || 0);
+                    const tempMin = Math.round(daily.temperature_2m_min[i] || 0);
+                    const code = daily.weathercode[i] || 0;
+                    
+                    let icon = '☀️';
+                    if (code <= 2) icon = '☀️';
+                    else if (code <= 3) icon = '⛅';
+                    else if (code <= 48) icon = '🌫️';
+                    else if (code <= 65) icon = '🌧️';
+                    else if (code <= 75) icon = '❄️';
+                    else if (code <= 82) icon = '🌦️';
+                    else if (code === 95) icon = '⛈️';
+                    else icon = '☁️';
+                    
+                    forecastHtml += `
+                        <div style="flex:1; min-width:80px; text-align:center; padding:10px 6px; background:${isToday ? '#ecfdf5' : 'var(--bg-card)'}; border-radius:12px; border:1px solid var(--border);">
+                            <div style="font-weight:700; font-size:10px; color:var(--muted);">${dayName}</div>
+                            <div style="font-size:22px; margin:6px 0;">${icon}</div>
+                            <div style="font-weight:800; font-size:13px; color:#0369a1;">${rain.toFixed(1)}mm</div>
+                            <div style="font-size:9px; color:var(--muted);">💧 ${prob}%</div>
+                            <div style="font-size:10px; font-weight:600; margin-top:4px;">${tempMax}°/${tempMin}°</div>
+                        </div>`;
+                }
+                forecastHtml += '</div>';
+                
+                return { totalRain, forecastHtml, location: `${lat.toFixed(2)}°, ${lng.toFixed(2)}°` };
+            } catch (err) {
+                console.error('Rainfall fetch error:', err);
+                return null;
+            }
+        }
+
+        // ── DASHBOARD ────────────────────────────────────────────────
+        async function renderDashboard() {
+            let fields = loadFields(), events = loadEvents(), groups = loadGroups();
+            let totalHa = fields.reduce((s,f)=>s+f.areaHa,0), statuses = fields.map(f=>getStatus(f));
+            let today = todayStr(), thisMonth = today.slice(0,7), evM = events.filter(e=>e.startDate.startsWith(thisMonth)).length;
+            
+            document.getElementById('dashGrid').innerHTML = [
+                {label:'Total fields',val:fields.length,sub:totalHa.toFixed(1)+' ha'},
+                {label:'Grazing now',val:statuses.filter(s=>s.cls==='grazing').length,sub:'active'},
+                {label:'Ready to graze',val:statuses.filter(s=>s.cls==='ready').length,sub:'rest met'},
+                {label:'Events this month',val:evM,sub:thisMonth},
+                {label:'Animal groups',val:groups.length,sub:'herds/flocks'}
+            ].map(c=>`<div class="kpi"><div class="kpi-lbl">${c.label}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div></div>`).join('');
+            
+            document.getElementById('dashFieldStatus').innerHTML = `<div class="card-title">🌾 Field status</div>${fields.length?`<div class="status-grid">${fields.map(f=>{ let s=getStatus(f); return `<div class="status-tile" style="background:${statusFillColor(f)}" onclick="switchTab('map');selectField('${f.id}')"><div class="status-tile-name">${f.name}</div><div class="status-tile-sub">${f.areaHa.toFixed(1)} ha · ${s.label}</div></div>`; }).join('')}</div>`:'<p style="color:var(--faint)">No fields yet.</p>'}`;
+            
+            let recent = events.slice().sort((a,b)=>b.startDate.localeCompare(a.startDate)).slice(0,6);
+            document.getElementById('dashRecentEvents').innerHTML = `<div class="card-title">📋 Recent events</div>${recent.length?`<table class="htbl"><thead><tr><th>Date</th><th>Field</th><th>Animals</th><th>Days</th></tr></thead><tbody>${recent.map(e=>{ let f=fields.find(x=>x.id===e.fieldId); return `<tr><td>${fmtDate(e.startDate)}</td><td>${f?f.name:'?'}</td><td>${e.animalCount} ${e.animalType}</td><td>${daysBetween(e.startDate,e.endDate)}</td></tr>`; }).join('')}</tbody></table>`:'<p style="color:var(--faint)">No events yet.</p>'}`;
+            
+            let si = fields.map(f=>{ let fe=events.filter(e=>e.fieldId===f.id).sort((a,b)=>b.startDate.localeCompare(a.startDate)); if(!fe.length) return null; let last=fe[0],auHa=(last.animalCount/f.areaHa).toFixed(1),over=f.maxAUperHa&&(last.animalCount/f.areaHa)>f.maxAUperHa; return `<div class="detail-row"><span class="detail-key">${f.name}</span><span class="detail-val" style="color:${over?'#dc2626':'#166534'}">${auHa} AU/ha${over?' ⚠':''}</span></div>`; }).filter(Boolean);
+            document.getElementById('dashStocking').innerHTML = `<div class="card-title">📊 Stocking rates</div>${si.length?si.join(''):'<p style="color:var(--faint)">No events yet.</p>'}`;
+            
+            renderAnimalGroupsCard();
+            renderFieldDonutChart();
+            
+            // Dashboard Rainfall
+            let center = getFarmCenter();
+            if (!center) {
+                try {
+                    const cfg = JSON.parse(localStorage.getItem('gt_config') || '{}');
+                    if (cfg.lat && cfg.lng) center = { lat: cfg.lat, lng: cfg.lng };
+                } catch(e) {}
+            }
+            
+            const rainfallEl = document.getElementById('dashRainfall');
+            if (rainfallEl) {
+                if (center) {
+                    rainfallEl.innerHTML = '<div class="card-title">🌧️ Rainfall &amp; Forecast</div><div style="padding:20px;text-align:center"><div class="loading-spinner"></div><p style="color:var(--muted);font-size:12px;margin-top:10px">Loading weather data...</p></div>';
+                    const weather = await fetchRainfall(center.lat, center.lng, 'dashRainfall');
+                    if (weather) {
+                        rainfallEl.innerHTML = `
+                            <div class="card-title">🌧️ Rainfall &amp; Forecast</div>
+                            <div style="background:linear-gradient(135deg, #0f766e20, #10b98110); border-radius:12px; padding:12px; margin-bottom:12px;">
+                                <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                                    <span style="font-size:11px; color:var(--muted);">14-day total</span>
+                                    <span style="font-size:24px; font-weight:800; color:#0f766e;">${weather.totalRain.toFixed(1)}<span style="font-size:12px;"> mm</span></span>
+                                </div>
+                                <div style="font-size:10px; color:var(--muted); margin-top:4px;">${weather.location}</div>
+                            </div>
+                            ${weather.forecastHtml}
+                            <div style="font-size:9px; color:var(--faint); text-align:center; margin-top:10px;">Data: Open-Meteo.com</div>`;
+                    } else {
+                        rainfallEl.innerHTML = '<div class="card-title">🌧️ Rainfall &amp; Forecast</div><p style="color:#ef4444;font-size:12px;padding:16px;text-align:center">⚠️ Could not load weather data.</p>';
+                    }
+                } else {
+                    rainfallEl.innerHTML = '<div class="card-title">🌧️ Rainfall &amp; Forecast</div><p style="color:var(--faint);font-size:12px;padding:16px;text-align:center">📍 Add fields or set farm location in setup to see rainfall data.</p>';
+                }
+            }
+        }
+
+        function renderFieldDonutChart() {
+            const el = document.getElementById('dashFieldChart'); if (!el) return;
+            const fields = loadFields(); const totalHa = fields.reduce((s,f)=>s+f.areaHa,0);
+            if (!fields.length || totalHa === 0) { el.innerHTML = `<div class="card-title">🌾 Farm Area Breakdown</div><div style="text-align:center;padding:30px;color:var(--faint);font-size:12px">No fields yet</div>`; return; }
+            el.innerHTML = `<div class="card-title">🌾 Farm Area Breakdown</div><div style="text-align:center;padding:20px"><div style="font-size:32px;font-weight:800;color:#10b981">${totalHa.toFixed(1)}<span style="font-size:14px;"> ha</span></div><div style="font-size:12px;color:var(--muted);margin-top:4px">across ${fields.length} field${fields.length!==1?'s':''}</div><div style="margin-top:16px">${fields.slice(0,5).map(f=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span><span style="display:inline-block;width:10px;height:10px;background:${f.color};border-radius:50%;margin-right:8px"></span>${f.name}</span><span style="font-weight:600">${f.areaHa.toFixed(1)} ha</span></div>`).join('')}${fields.length>5?`<div style="text-align:center;padding:8px;color:var(--muted);font-size:11px">+${fields.length-5} more fields</div>`:''}</div></div>`;
+        }
+
+        // ── ROTATION ────────────────────────────────────────────────
+        function renderRotation() {
+            let fields = loadFields();
+            if (!fields.length) { document.getElementById('rotationHero').innerHTML = '<div class="rh-label">No fields yet</div><div class="rh-sub">Add fields to see rotation recommendations.</div>'; document.getElementById('rotationList').innerHTML = ''; return; }
+            let scored = fields.map(f => { let pct = getReadinessPct(f), status = getStatus(f), evts = loadEvents().filter(e => e.fieldId === f.id).sort((a,b)=>b.startDate.localeCompare(a.startDate)), last = evts[0], restDays = last ? daysSince(last.endDate) : null, daysToReady = last && restDays < f.restTarget ? f.restTarget - restDays : 0; return { field: f, pct, status, restDays, daysToReady }; }).sort((a,b) => b.pct - a.pct);
+            let best = scored.find(s => s.status.cls === 'ready' || s.status.cls === 'none');
+            document.getElementById('rotationHero').innerHTML = best ? `<div class="rh-label">🌟 Recommended next field</div><div class="rh-name">${best.field.name}</div><div class="rh-sub">${best.field.areaHa.toFixed(1)} ha · ${best.pct}% rest complete · Ready to graze!</div>` : `<div class="rh-label">⏳ No fields ready yet</div><div class="rh-sub">Allow fields to complete their rest period. Check back soon!</div>`;
+            document.getElementById('rotationList').innerHTML = scored.map(({field,pct,status,restDays,daysToReady}) => `<div class="rot-item" onclick="switchTab('map');selectField('${field.id}')"><div class="rot-top"><div><div class="rot-name">${field.name}</div><div class="rot-meta">${field.areaHa.toFixed(1)} ha · ${restDays!==null?restDays+'d resting':'never grazed'} · target ${field.restTarget}d</div></div><span class="pill pill-${status.cls}">${status.label}</span></div><div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;background:${pct>=100?'#10b981':pct>=60?'#f59e0b':'#ef4444'}"></div></div><div class="prog-labels"><span>🌿 Rest: ${pct}%</span><span>${daysToReady>0?'📅 Ready in '+daysToReady+'d':pct>=100?'✅ Ready now':'⏸️ Grazing'}</span></div></div>`).join('');
+        }
+
+        // ── REPORTS ─────────────────────────────────────────────────
+        function renderReports() {
+            document.getElementById('reportsPage').innerHTML = `<div class="rep-section"><div class="rep-title">📄 PDF Farm Report</div><p style="font-size:12px;color:var(--muted);margin-bottom:10px">Generate a complete PDF report with all fields, events, and stocking rates.</p><button class="rep-btn" onclick="generatePDF()">⬇️ Download PDF Report</button></div><div class="rep-section"><div class="rep-title">💾 Data Export</div><div class="rep-actions"><button class="rep-btn" onclick="exportJSON()">📦 JSON Backup</button><button class="rep-btn" onclick="exportGeoJSON()">🗺️ GeoJSON Fields</button><button class="rep-btn" onclick="exportCSV()">📊 Events CSV</button></div></div><div class="rep-section"><div class="rep-title">📈 Farm Statistics</div><p style="font-size:12px;color:var(--muted);line-height:1.6">Total fields: ${loadFields().length}<br>Total grazing events: ${loadEvents().length}<br>Total area: ${loadFields().reduce((s,f)=>s+f.areaHa,0).toFixed(1)} ha</p></div>`;
+        }
+
+        // ── ENHANCED ANALYTICS WITH RAINFALL ─────────────────────────
+        async function renderAnalytics() {
+            let fields = loadFields(), events = loadEvents(), groups = loadGroups();
+            if (!fields.length) { 
+                document.getElementById('analyticsContent').innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><p class="empty-msg">No data to analyse yet</p><p class="empty-sub">Add fields and log grazing events to see insights here.</p></div>`;
+                return;
+            }
+            
+            let totalHa = fields.reduce((s,f)=>s+f.areaHa,0);
+            let statuses = fields.map(f=>getStatus(f));
+            let grazingNow = statuses.filter(s=>s.cls==='grazing').length;
+            let readyCount = statuses.filter(s=>s.cls==='ready').length;
+            let restingCount = statuses.filter(s=>s.cls==='resting').length;
+            let totalGrazingDays = events.reduce((sum, e) => sum + daysBetween(e.startDate, e.endDate), 0);
+            let avgRestCompliance = Math.round(fields.reduce((sum, f) => sum + getReadinessPct(f), 0) / fields.length);
+            
+            // Monthly grazing trend
+            let monthlyData = {};
+            events.forEach(e => {
+                let month = e.startDate.slice(0, 7);
+                monthlyData[month] = (monthlyData[month] || 0) + daysBetween(e.startDate, e.endDate);
+            });
+            let months = Object.keys(monthlyData).sort().slice(-6);
+            let monthlyDays = months.map(m => monthlyData[m]);
+            
+            // Field utilization
+            let fieldUtilization = fields.map(f => {
+                let fEvents = events.filter(e => e.fieldId === f.id);
+                let grazingDays = fEvents.reduce((sum, e) => sum + daysBetween(e.startDate, e.endDate), 0);
+                let utilization = Math.min(100, Math.round((grazingDays / 365) * 100));
+                return { name: f.name, utilization, color: f.color };
+            }).sort((a,b) => b.utilization - a.utilization);
+            
+            // Get weather data for analytics
+            let center = getFarmCenter();
+            let weatherHtml = '<div class="analytics-card"><div class="analytics-card-title">🌤️ Weather & Rainfall</div><div style="padding:20px;text-align:center"><div class="loading-spinner"></div><p>Loading weather data...</p></div></div>';
+            
+            if (center) {
+                const weather = await fetchRainfall(center.lat, center.lng, 'analyticsWeather');
+                if (weather) {
+                    weatherHtml = `
+                        <div class="analytics-card">
+                            <div class="analytics-card-title">🌤️ Weather & Rainfall (${weather.location})</div>
+                            <div style="background:linear-gradient(135deg, #0f766e20, #10b98110); border-radius:12px; padding:12px; margin-bottom:12px;">
+                                <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                                    <span style="font-size:12px; color:var(--muted);">14-day rainfall total</span>
+                                    <span style="font-size:28px; font-weight:800; color:#0f766e;">${weather.totalRain.toFixed(1)}<span style="font-size:14px;"> mm</span></span>
+                                </div>
+                            </div>
+                            <div style="font-size:11px; font-weight:600; margin-bottom:8px; color:var(--muted);">7-Day Forecast</div>
+                            ${weather.forecastHtml}
+                            <div style="font-size:9px; color:var(--faint); text-align:center; margin-top:12px;">Data: Open-Meteo.com (free weather API)</div>
+                        </div>`;
+                } else {
+                    weatherHtml = `<div class="analytics-card"><div class="analytics-card-title">🌤️ Weather & Rainfall</div><p style="color:#ef4444;font-size:12px;padding:16px;text-align:center">⚠️ Could not load weather data. Check internet connection.</p></div>`;
+                }
+            } else {
+                weatherHtml = `<div class="analytics-card"><div class="analytics-card-title">🌤️ Weather & Rainfall</div><p style="color:var(--faint);font-size:12px;padding:16px;text-align:center">📍 Add fields or set farm location in setup to see weather data.</p></div>`;
+            }
+            
+            let html = `
+                <div class="analytics-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:20px; margin-top:20px;">
+                    <div class="analytics-card">
+                        <div class="analytics-card-title">📊 Farm Overview</div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                            <div style="background:var(--bg); padding:12px; border-radius:12px; text-align:center;">
+                                <div style="font-size:28px; font-weight:800; color:#10b981;">${fields.length}</div>
+                                <div style="font-size:11px; color:var(--muted);">Total Fields</div>
+                            </div>
+                            <div style="background:var(--bg); padding:12px; border-radius:12px; text-align:center;">
+                                <div style="font-size:28px; font-weight:800; color:#0f766e;">${totalHa.toFixed(1)}</div>
+                                <div style="font-size:11px; color:var(--muted);">Total Hectares</div>
+                            </div>
+                            <div style="background:var(--bg); padding:12px; border-radius:12px; text-align:center;">
+                                <div style="font-size:28px; font-weight:800; color:#f59e0b;">${events.length}</div>
+                                <div style="font-size:11px; color:var(--muted);">Grazing Events</div>
+                            </div>
+                            <div style="background:var(--bg); padding:12px; border-radius:12px; text-align:center;">
+                                <div style="font-size:28px; font-weight:800; color:#8b5cf6;">${totalGrazingDays}</div>
+                                <div style="font-size:11px; color:var(--muted);">Total Grazing Days</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <div class="analytics-card-title">📈 Field Status Distribution</div>
+                        <div style="margin-top:8px;">
+                            <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span>🟢 Ready to Graze</span><span style="font-weight:700;">${readyCount} (${Math.round(readyCount/fields.length*100)}%)</span></div>
+                            <div style="height:8px; background:#e2e8f0; border-radius:10px; margin-bottom:12px;"><div style="width:${readyCount/fields.length*100}%; height:100%; background:#10b981; border-radius:10px;"></div></div>
+                            <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span>🟡 Resting</span><span style="font-weight:700;">${restingCount} (${Math.round(restingCount/fields.length*100)}%)</span></div>
+                            <div style="height:8px; background:#e2e8f0; border-radius:10px; margin-bottom:12px;"><div style="width:${restingCount/fields.length*100}%; height:100%; background:#f59e0b; border-radius:10px;"></div></div>
+                            <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span>🔴 Currently Grazing</span><span style="font-weight:700;">${grazingNow} (${Math.round(grazingNow/fields.length*100)}%)</span></div>
+                            <div style="height:8px; background:#e2e8f0; border-radius:10px;"><div style="width:${grazingNow/fields.length*100}%; height:100%; background:#ef4444; border-radius:10px;"></div></div>
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <div class="analytics-card-title">🌿 Rest Compliance Score</div>
+                        <div style="text-align:center; padding:16px;">
+                            <div style="position:relative; display:inline-block;">
+                                <svg width="120" height="120" viewBox="0 0 120 120">
+                                    <circle cx="60" cy="60" r="54" fill="none" stroke="#e2e8f0" stroke-width="12"/>
+                                    <circle cx="60" cy="60" r="54" fill="none" stroke="#10b981" stroke-width="12" 
+                                            stroke-dasharray="${2*Math.PI*54}" stroke-dashoffset="${2*Math.PI*54*(1-avgRestCompliance/100)}" 
+                                            transform="rotate(-90 60 60)"/>
+                                    <text x="60" y="60" text-anchor="middle" dominant-baseline="middle" font-size="22" font-weight="800" fill="var(--text)">${avgRestCompliance}%</text>
+                                </svg>
+                            </div>
+                            <div style="margin-top:12px; font-size:12px; color:var(--muted);">Average rest compliance across all fields</div>
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <div class="analytics-card-title">📊 Field Utilization Rate</div>
+                        ${fieldUtilization.slice(0,6).map(f => `
+                            <div style="margin-bottom:12px;">
+                                <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+                                    <span style="font-weight:600;">${f.name}</span>
+                                    <span>${f.utilization}%</span>
+                                </div>
+                                <div style="height:6px; background:var(--border-light); border-radius:10px;">
+                                    <div style="width:${f.utilization}%; height:100%; background:${f.utilization>70?'#ef4444':f.utilization>40?'#f59e0b':'#10b981'}; border-radius:10px;"></div>
+                                </div>
+                            </div>
+                        `).join('')}
+                        <div style="margin-top:8px; font-size:10px; color:var(--muted); text-align:center;">Higher utilization = more grazing pressure</div>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <div class="analytics-card-title">📅 Monthly Grazing Trend (Last 6 Months)</div>
+                        <div style="margin-top:12px;">
+                            ${months.length ? months.map((m, i) => {
+                                let maxDays = Math.max(...monthlyDays, 1);
+                                let height = Math.max(20, (monthlyDays[i] / maxDays) * 80);
+                                let monthName = m.slice(5) + '/' + m.slice(2,4);
+                                return `<div style="display:inline-block; width:${100/months.length}%; text-align:center;">
+                                    <div style="height:80px; display:flex; align-items:flex-end; justify-content:center;">
+                                        <div style="width:80%; height:${height}px; background:linear-gradient(180deg, #10b981, #059669); border-radius:4px 4px 0 0;"></div>
+                                    </div>
+                                    <div style="font-size:9px; color:var(--muted); margin-top:4px;">${monthName}</div>
+                                    <div style="font-size:10px; font-weight:700;">${monthlyDays[i]}d</div>
+                                </div>`;
+                            }).join('') : '<div style="text-align:center; padding:20px; color:var(--muted);">Not enough data yet</div>'}
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <div class="analytics-card-title">🐄 Animal Groups Summary</div>
+                        ${groups.length ? groups.map(g => `
+                            <div style="display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border-light);">
+                                <div style="font-size:24px;">${getGroupEmoji(g.type)}</div>
+                                <div style="flex:1;">
+                                    <div style="font-weight:700;">${g.name}</div>
+                                    <div style="font-size:11px; color:var(--muted);">${g.count} ${g.type}${g.herd ? ' · ' + g.herd : ''}</div>
+                                </div>
+                            </div>
+                        `).join('') : '<div style="text-align:center; padding:20px; color:var(--muted);">No animal groups defined yet</div>'}
+                        <button class="btn-primary" style="width:100%; margin-top:12px; padding:8px;" onclick="openGroupModal(null)">+ Add Animal Group</button>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <div class="analytics-card-title">⚡ Grazing Efficiency Metrics</div>
+                        <div style="padding:8px 0;">
+                            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-light);"><span>Average grazing days per event</span><span style="font-weight:700;">${events.length ? Math.round(totalGrazingDays/events.length) : 0} days</span></div>
+                            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-light);"><span>Average AU/ha per event</span><span style="font-weight:700;">${(events.reduce((sum, e) => {
+                                let f = fields.find(f => f.id === e.fieldId);
+                                return sum + (f ? e.animalCount / f.areaHa : 0);
+                            }, 0) / (events.length || 1)).toFixed(1)} AU/ha</span></div>
+                            <div style="display:flex; justify-content:space-between; padding:8px 0;"><span>Pasture rest ratio</span><span style="font-weight:700;">${(totalGrazingDays / (fields.length * 365) * 100).toFixed(1)}%</span></div>
+                        </div>
+                    </div>
+                    
+                    ${weatherHtml}
+                </div>
+            `;
+            
+            document.getElementById('analyticsContent').innerHTML = html;
+        }
+
+        // ── EXPORT FUNCTIONS ─────────────────────────────────────────
+        function generatePDF() { alert('📄 PDF Report: ' + loadFields().length + ' fields, ' + loadEvents().length + ' events'); }
+        function exportJSON() { let data = { fields: loadFields(), events: loadEvents(), groups: loadGroups(), exportedAt: new Date().toISOString() }; download('grazingtrack-backup.json', JSON.stringify(data, null, 2), 'application/json'); }
+        function exportGeoJSON() { let fc = { type: 'FeatureCollection', features: loadFields().map(f => ({ type: 'Feature', properties: { name: f.name, area_ha: f.areaHa }, geometry: f.geometry })) }; download('grazingtrack-fields.geojson', JSON.stringify(fc, null, 2), 'application/geo+json'); }
+        function exportCSV() { let rows = [['Field','Start','End','Days','Type','Count','AU/ha','Notes']]; loadEvents().forEach(e => { let f = loadFields().find(x=>x.id===e.fieldId); rows.push([f?f.name:'?', e.startDate, e.endDate, daysBetween(e.startDate,e.endDate), e.animalType, e.animalCount, f ? (e.animalCount/f.areaHa).toFixed(2) : '', `"${(e.notes||'').replace(/"/g,'""')}"`]); }); download('grazingtrack-events.csv', rows.map(r=>r.join(',')).join('\n'), 'text/csv'); }
+        function download(filename, content, type) { let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type })); a.download = filename; a.click(); URL.revokeObjectURL(a.href); }
+        function importJSON(event) { let file = event.target.files[0]; if (!file) return; let reader = new FileReader(); reader.onload = e => { try { let data = JSON.parse(e.target.result); if (!confirm(`Import ${data.fields?.length||0} fields and ${data.events?.length||0} events?`)) return; saveFields(data.fields||[]); saveEvents(data.events||[]); saveGroups(data.groups||[]); colorIdx = (data.fields||[]).length % COLORS.length; drawnItems.clearLayers(); restoreFieldsOnMap(); renderFieldList(); updateStats(); closeModal('modalExport'); setStatus(`Imported ${data.fields?.length||0} fields.`); } catch(err) { alert('Invalid backup file.'); } }; reader.readAsText(file); event.target.value = ''; }
+        function clearAllData() { if (!confirm('Delete ALL data? Export a backup first.\nThis cannot be undone.')) return; ['gt_fields','gt_events','gt_groups'].forEach(k=>localStorage.removeItem(k)); drawnItems.clearLayers(); colorIdx=0; renderFieldList(); updateStats(); updateStorageBar(); deselectField(); closeModal('modalExport'); setStatus('All data cleared.'); }
+
+        // ── SETUP ───────────────────────────────────────────────────
+        let setupStep = 1, setupData = { farmName: '', lat: null, lng: null, animalGroups: [] };
+        function checkFirstRun() { if (!localStorage.getItem('gt_setup_done')) openSetup(); }
+        function openSetup() { setupStep = 1; setupData = { farmName: '', lat: null, lng: null, animalGroups: [] }; openModal('modalSetup'); renderSetup(); }
+        function closeSetup(completed) { closeModal('modalSetup'); if (completed) { localStorage.setItem('gt_setup_done', '1'); try { let cfg = JSON.parse(localStorage.getItem('gt_config')||'{}'); cfg.farmName = setupData.farmName; if(setupData.lat){cfg.lat=setupData.lat;cfg.lng=setupData.lng;} localStorage.setItem('gt_config',JSON.stringify(cfg)); } catch(e){} if(setupData.farmName) document.getElementById('farmNameDisplay').textContent = setupData.farmName; if(setupData.animalGroups.length){ saveGroups([...loadGroups(),...setupData.animalGroups]); renderGroupPicker(); } } }
+        function renderSetup() { document.getElementById('setupProgress').style.width = ((setupStep/4)*100)+'%'; document.getElementById('setupBack').style.display = setupStep>1 ? 'flex' : 'none'; document.getElementById('setupNext').textContent = setupStep===4 ? 'Finish ✓' : 'Next →'; let body = document.getElementById('setupBody'); if(setupStep===1){ document.getElementById('setupTitle').textContent='Welcome to GrazingTrack'; body.innerHTML=`<p class="setup-desc">Free rotational grazing management — all on your device. No cloud, no accounts.</p><div class="setup-field"><label>Farm name</label><input type="text" id="setupName" placeholder="e.g. Riverside Farm" value="${setupData.farmName}" maxlength="50"></div><div class="setup-field"><label>Location (optional)</label><div style="display:flex;gap:8px"><input type="number" id="setupLat" placeholder="Latitude" step="any" value="${setupData.lat||''}"><input type="number" id="setupLng" placeholder="Longitude" step="any" value="${setupData.lng||''}"></div></div><div class="setup-tip">💡 Data stays on your device — export it from the ⬇️ button anytime.</div>`; }
+            if(setupStep===2){ document.getElementById('setupTitle').textContent='Your animals'; body.innerHTML=`<p class="setup-desc">Add your herds and flocks. You can skip this and add groups later from the Dashboard.</p><button class="add-group-btn" onclick="addSetupGroup()">+ Add animal group</button><div id="setupGroups"></div>`; renderSetupGroups(); }
+            if(setupStep===3){ document.getElementById('setupTitle').textContent='Review'; body.innerHTML=`<div class="review-card"><div class="detail-row"><span class="detail-key">Farm</span><span class="detail-val">${setupData.farmName||'—'}</span></div><div class="detail-row"><span class="detail-key">Location</span><span class="detail-val">${setupData.lat?`${setupData.lat.toFixed(3)}, ${setupData.lng.toFixed(3)}`:'Not set'}</span></div><div class="detail-row"><span class="detail-key">Animal groups</span><span class="detail-val">${setupData.animalGroups.length||'None (add later)'}</span></div></div>`; }
+            if(setupStep===4){ document.getElementById('setupTitle').textContent='Ready!'; body.innerHTML=`<p class="setup-desc">Click <strong>Finish</strong> to start using GrazingTrack.</p><div class="setup-tip">💡 Tip: Use <strong>Auto-split</strong> to quickly divide a farm into camps.</div>`; }
+        }
+        function renderSetupGroups() { let container = document.getElementById('setupGroups'); if(!container) return; container.innerHTML = setupData.animalGroups.map((g,i)=>`<div style="margin:8px 0;padding:8px;border:1px solid #ddd;border-radius:8px"><input type="text" placeholder="Name" value="${g.name}" onchange="setupData.animalGroups[${i}].name=this.value"><select onchange="setupData.animalGroups[${i}].type=this.value"><option value="cattle" ${g.type==='cattle'?'selected':''}>Cattle</option><option value="sheep" ${g.type==='sheep'?'selected':''}>Sheep</option><option value="goats" ${g.type==='goats'?'selected':''}>Goats</option></select><input type="number" placeholder="Count" value="${g.count}" onchange="setupData.animalGroups[${i}].count=parseInt(this.value)"><button onclick="removeSetupGroup(${i})">✕</button></div>`).join(''); }
+        function addSetupGroup() { setupData.animalGroups.push({id:uid(),name:'',type:'cattle',count:0,herd:''}); renderSetupGroups(); }
+        function removeSetupGroup(i) { setupData.animalGroups.splice(i,1); renderSetupGroups(); }
+        function setupNext() { if(setupStep===1){ let n=document.getElementById('setupName')?.value.trim(); if(n) setupData.farmName=n; let la=parseFloat(document.getElementById('setupLat')?.value), lo=parseFloat(document.getElementById('setupLng')?.value); if(!isNaN(la)&&!isNaN(lo)){setupData.lat=la;setupData.lng=lo;} } if(setupStep===4){ closeSetup(true); return; } setupStep++; renderSetup(); }
+        function setupBack() { if(setupStep>1){setupStep--;renderSetup();} }
+
+        // ── SWITCH TAB ──────────────────────────────────────────────
+        window.switchTab = function(name) {
+            document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.id === 'tab-' + name));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+            if (name === 'map') setTimeout(() => { if (map) map.invalidateSize(); }, 50);
+            if (name === 'dashboard') renderDashboard();
+            if (name === 'rotation') renderRotation();
+            if (name === 'reports') renderReports();
+            if (name === 'analytics') renderAnalytics();
+        };
+
+        window.openModal = function(id) { let el = document.getElementById(id); if (el) el.style.display = 'flex'; };
+        window.closeModal = function(id) { let el = document.getElementById(id); if (el) el.style.display = 'none'; };
+        window.toggleSidebar = function() {
+            let sb = document.getElementById('sidebar'), btn = document.getElementById('sbExpandBtn');
+            if (window.innerWidth > 900) {
+                let hidden = sb.classList.toggle('sb-hidden');
+                if (btn) btn.style.display = hidden ? 'flex' : 'none';
+                setTimeout(() => { if (map) map.invalidateSize(); }, 320);
+                try { localStorage.setItem('gt_sb_hidden', hidden ? '1' : '0'); } catch(e) {}
+            } else { sb.classList.toggle('open'); }
+        };
+        window.closeSidebar = function() { document.getElementById('sidebar').classList.remove('open'); };
+        window.installApp = function() { if (window.deferredInstall) { window.deferredInstall.prompt(); window.deferredInstall.userChoice.then(() => { window.deferredInstall = null; document.getElementById('installBanner').classList.remove('show'); }); } };
+
+        // Make functions globally available for inline onclick handlers
+        window.selectGroup = selectGroup;
+        window.selectManualEntry = selectManualEntry;
+        window.renderGroupPicker = renderGroupPicker;
+        window.openGrazingModal = openGrazingModal;
+        window.saveGrazingEvent = saveGrazingEvent;
+        window.openGroupModal = openGroupModal;
+        window.saveGroup = saveGroup;
+        window.deleteGroup = deleteGroup;
+        window.openHistoryModal = openHistoryModal;
+        window.deleteEvent = deleteEvent;
+        window.historyAddEvent = historyAddEvent;
+        window.endGrazingToday = endGrazingToday;
+        window.editField = openEditFieldModal;
+
+        // ── INITIALIZATION ──────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                initMap();
+                try { let cfg = JSON.parse(localStorage.getItem('gt_config') || '{}'); if (cfg.farmName) document.getElementById('farmNameDisplay').textContent = cfg.farmName; } catch(e) {}
+                try { if (localStorage.getItem('gt_sb_hidden') === '1' && window.innerWidth > 900) { document.getElementById('sidebar').classList.add('sb-hidden'); document.getElementById('sbExpandBtn').style.display = 'flex'; } } catch(e) {}
+            }, 100);
+        });
+
+        // PWA
+        if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+        let deferredInstall = null;
+        window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; window.deferredInstall = deferredInstall; document.getElementById('installBanner').classList.add('show'); });
+    </script>
+    <script src="gt-split.js"></script>
+    <script src="gt-events.js"></script>
+    <script src="gt-map.js"></script>
+    <script src="gt-dashboard.js"></script>
+    <script src="gt-analytics.js"></script>
+    <script src="gt-data.js"></script>
+    <script src="gt-utils.js"></script>
+    <script src="gt-offline.js"></script>
+
+    <style>
+        /* Additional styles */
+        
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 20px;
+        }
+        
+        .analytics-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            transition: all 0.2s;
+        }
+        
+        .analytics-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transform: translateY(-2px);
+        }
+        
+        .analytics-card-title {
+            font-size: 13px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+        
+        .rep-section {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+        }
+        
+        .rep-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        
+        .rep-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        
+        .rep-btn {
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 1.5px solid var(--border);
+            background: var(--bg-card);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .rep-btn:hover {
+            border-color: #10b981;
+            background: #ecfdf5;
+            transform: translateY(-2px);
+        }
+        
+        .add-group-small {
+            margin-left: auto;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: #10b981;
+            color: white;
+            border: none;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        
+        .group-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-light);
+        }
+        
+        .group-icon {
+            font-size: 28px;
+        }
+        
+        .group-info {
+            flex: 1;
+        }
+        
+        .group-name {
+            font-weight: 700;
+        }
+        
+        .group-detail {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        
+        .group-actions {
+            display: flex;
+            gap: 6px;
+        }
+        
+        .group-edit,
+        .group-delete {
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+        
+        .group-delete:hover {
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+        
+        .loading-spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid var(--border);
+            border-top-color: #10b981;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        
+        .group-select-btn:hover {
+            border-color: #10b981 !important;
+            transform: translateY(-1px);
+        }
+    </style>
+
+</body>
+
+</html>
