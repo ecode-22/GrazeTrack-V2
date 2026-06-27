@@ -107,6 +107,20 @@
 
         <div class="tab-panel active" id="panel-map">
             <div id="map"></div>
+
+            <!-- Auto-split inline panel — slides in from the right after boundary is drawn -->
+            <div id="asSplitPanel" class="as-split-panel">
+                <div class="as-sp-hdr">
+                    <span class="as-sp-title">⬡ Auto-split</span>
+                    <button class="as-sp-close" onclick="closeAutoSplit()" title="Cancel">✕</button>
+                </div>
+                <div id="asControlPanel" class="as-sp-body"></div>
+                <div class="as-sp-footer">
+                    <button class="btn-ghost" onclick="closeAutoSplit()">Cancel</button>
+                    <button class="btn-primary" id="asSaveBtn" onclick="asSave()" disabled>✓ Create camps</button>
+                </div>
+            </div>
+
             <button class="sb-expand-btn" id="sbExpandBtn" onclick="toggleSidebar()" title="Show sidebar">☰</button>
             <div class="map-statusbar">
                 <button class="map-menu-btn" onclick="toggleSidebar()">☰</button>
@@ -163,22 +177,6 @@
         </div>
     </main>
 
-    <div class="overlay" id="modalAutoSplit" style="display:none">
-        <div class="modal mxl as-layout">
-            <div class="mh">
-                <div class="mh-title">⬡ Auto-split farm into camps</div>
-                <button class="mh-close" onclick="closeAutoSplit()">✕</button>
-            </div>
-            <div class="mb as-mb">
-                <div id="asMap" class="as-map-wrap" style="width:100%;height:400px;border:1px solid #ddd;border-radius:6px;"></div>
-                <div id="asControlPanel" class="as-panel" style="margin-top:15px;"></div>
-            </div>
-            <div class="mf">
-                <button class="btn-ghost" onclick="closeAutoSplit()">Cancel</button>
-                <button class="btn-primary" id="asSaveBtn" onclick="asSave()">✓ Create camps</button>
-            </div>
-        </div>
-    </div>
     <div class="overlay" id="modalName" style="display:none">
         <div class="modal msm">
             <div class="mh">

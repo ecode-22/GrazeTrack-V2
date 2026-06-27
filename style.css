@@ -3026,3 +3026,262 @@ body {
     background: var(--grn-pale);
     color: var(--grn-dark);
 }
+
+
+/* ══════════════════════════════════════════════════════════════
+   Auto-Split Inline Panel  (slides in from the right of the map)
+   ══════════════════════════════════════════════════════════════ */
+
+/* The panel lives inside #panel-map (position:relative already) */
+.as-split-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100%;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    box-shadow: -6px 0 28px rgba(0,0,0,.13);
+    display: flex;
+    flex-direction: column;
+    z-index: 450;
+    /* Hidden off-screen by default */
+    transform: translateX(100%);
+    transition: transform .3s cubic-bezier(.4,0,.2,1);
+}
+
+.as-split-panel.open {
+    transform: translateX(0);
+}
+
+/* Header */
+.as-sp-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--border-light);
+    background: var(--bg-card);
+    flex-shrink: 0;
+}
+
+.as-sp-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: .02em;
+}
+
+.as-sp-close {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    color: var(--text-muted);
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: var(--transition);
+}
+.as-sp-close:hover { background: var(--bg-hover); color: var(--text); }
+
+/* Scrollable body */
+.as-sp-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 14px 6px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Footer */
+.as-sp-footer {
+    padding: 10px 14px;
+    border-top: 1px solid var(--border-light);
+    display: flex;
+    gap: 8px;
+    background: var(--bg);
+    flex-shrink: 0;
+}
+.as-sp-footer .btn-ghost { flex: 0 0 auto; }
+.as-sp-footer .btn-primary { flex: 1; }
+
+/* ── Sections ── */
+.as-section { margin-bottom: 16px; }
+
+.as-section-title {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-secondary);
+    margin-bottom: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.as-section-hint {
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-muted);
+}
+
+/* ── Count ── */
+.as-count-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.as-count-btn {
+    width: 34px; height: 34px;
+    border: 1.5px solid var(--border);
+    background: var(--bg-card);
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    transition: var(--transition);
+    color: var(--text);
+    flex-shrink: 0; line-height: 1;
+}
+.as-count-btn:hover { border-color: var(--grn); color: var(--grn); background: var(--grn-pale); }
+
+.as-count-input {
+    flex: 1;
+    padding: 5px 8px;
+    border: 1.5px solid var(--border);
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    font-size: 22px; font-weight: 800; text-align: center;
+    color: var(--text);
+    transition: var(--transition);
+}
+.as-count-input:focus { outline: none; border-color: var(--grn); background: var(--bg); }
+
+/* ── Direction buttons with SVG icons ── */
+.as-dir-row { display: flex; gap: 6px; }
+
+.as-dir-btn {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    padding: 8px 3px 6px;
+    border: 1.5px solid var(--border);
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .05em;
+    cursor: pointer; transition: var(--transition);
+    color: var(--text-secondary);
+}
+.as-dir-btn svg { width: 30px; height: 19px; }
+.as-dir-btn:hover { border-color: var(--grn); color: var(--grn-dark); background: var(--grn-pale); }
+.as-dir-btn.active { border-color: var(--grn); background: var(--grn-pale); color: var(--grn-dark); }
+
+/* ── Per-divider cards ── */
+.as-div-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 9px 11px;
+    margin-bottom: 6px;
+}
+.as-div-card:last-child { margin-bottom: 0; }
+
+.as-div-card-hdr {
+    display: flex; align-items: center; gap: 5px;
+    margin-bottom: 8px;
+}
+.as-div-card-swatch { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.as-div-card-sep { font-size: 9px; color: var(--text-muted); }
+.as-div-card-title { font-size: 11px; font-weight: 700; color: var(--text); flex: 1; }
+.as-div-card-camps { font-size: 9px; color: var(--text-muted); white-space: nowrap; }
+
+.as-div-row { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.as-div-row:last-child { margin-bottom: 0; }
+.as-div-lbl { font-size: 10px; font-weight: 600; color: var(--text-secondary); min-width: 46px; flex-shrink: 0; }
+.as-div-slider { flex: 1; accent-color: var(--grn); cursor: pointer; }
+.as-ang-slider { accent-color: #f59e0b; }
+.as-div-pct { font-size: 10px; font-weight: 700; color: var(--grn-dark); min-width: 28px; text-align: right; flex-shrink: 0; }
+.as-div-group-lbl { font-size: 10px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing:.05em; margin-bottom:6px; padding-bottom:3px; border-bottom:1px solid var(--border); }
+.as-no-dividers { font-size: 12px; padding: 10px; text-align: center; color: var(--text-muted); }
+
+/* ── Camp name list ── */
+.as-name-list { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.as-name-row { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-bottom: 1px solid var(--border-light); }
+.as-name-row:last-child { border-bottom: none; }
+.as-camp-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.as-name-input {
+    flex: 1; padding: 4px 7px;
+    border: 1px solid transparent; background: transparent;
+    border-radius: var(--radius); font-size: 12px; color: var(--text);
+    transition: var(--transition); min-width: 0;
+}
+.as-name-input:hover { border-color: var(--border); background: var(--bg); }
+.as-name-input:focus { outline: none; border-color: var(--grn); background: var(--bg); }
+.as-name-input::placeholder { color: var(--text-muted); }
+.as-size-lbl { font-size: 10px; font-weight: 600; color: var(--text-secondary); min-width: 42px; text-align: right; flex-shrink: 0; }
+.as-reshape-btn {
+    width: 24px; height: 24px; padding: 0;
+    border: 1px solid var(--border); background: var(--bg-card);
+    border-radius: 5px; cursor: pointer; font-size: 11px;
+    transition: var(--transition); color: var(--text-secondary);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+}
+.as-reshape-btn:hover { border-color: var(--grn); background: var(--grn-pale); color: var(--grn-dark); }
+
+/* ── Total badge (inline in section title) ── */
+.as-total-badge {
+    font-size: 10px; font-weight: 700;
+    background: var(--grn-pale); color: var(--grn-dark); border: 1px solid var(--grn);
+    padding: 1px 7px; border-radius: 99px; white-space: nowrap;
+}
+
+/* ── Redraw button ── */
+.as-redraw-btn {
+    margin-top: auto; padding: 7px 10px;
+    border: 1.5px dashed var(--border); background: transparent;
+    border-radius: var(--radius); font-size: 11px; font-weight: 600;
+    cursor: pointer; color: var(--text-secondary); transition: var(--transition);
+    width: 100%; text-align: center;
+}
+.as-redraw-btn:hover { border-color: #dc2626; color: #dc2626; background: #fef2f2; }
+
+/* ── Welcome ── */
+.as-welcome {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 20px 8px; text-align: center; flex: 1;
+}
+.as-welcome-icon { font-size: 36px; margin-bottom: 10px; opacity: .55; }
+.as-welcome-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.as-welcome-sub { font-size: 12px; color: var(--text-secondary); line-height: 1.6; max-width: 220px; }
+
+/* ── Reshape state ── */
+.as-reshape-state { text-align: center; padding: 6px 0; }
+.as-reshape-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; margin: 0 auto 10px; color: white; }
+.as-reshape-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
+.as-reshape-sub { font-size: 12px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 14px; }
+.as-reshape-actions { display: flex; gap: 7px; margin-bottom: 10px; }
+.as-reshape-actions button { flex: 1; }
+.as-reshape-note { font-size: 10px; color: var(--text-muted); line-height: 1.5; padding: 7px 9px; background: var(--bg-card); border-radius: var(--radius); border: 1px solid var(--border); }
+
+/* ── Camp label on map ── */
+.camp-lbl { font-size: 10px; font-weight: 700; color: white; text-shadow: 0 1px 3px rgba(0,0,0,.8); white-space: nowrap; }
+
+/* Mobile: panel comes up from bottom */
+@media (max-width: 640px) {
+    .as-split-panel {
+        top: auto; right: 0; bottom: 0; left: 0;
+        width: 100%; height: 60vh;
+        border-left: none; border-top: 1px solid var(--border);
+        transform: translateY(100%);
+        box-shadow: 0 -6px 28px rgba(0,0,0,.13);
+    }
+    .as-split-panel.open { transform: translateY(0); }
+}

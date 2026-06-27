@@ -109,6 +109,14 @@ function initMap() {
     });
 
     map.on(L.Draw.Event.CREATED, e => {
+        // Auto-split mode: hand the layer off to the split tool instead of naming it
+        if (window._asSplitMode) {
+            window._asSplitMode = false;
+            try { map.removeControl(drawControl); } catch(er) {}
+            if (typeof _asOnBoundaryDrawn === 'function') _asOnBoundaryDrawn(e.layer);
+            return;
+        }
+
         pendingLayer = e.layer;
         drawnItems.addLayer(pendingLayer);
         vertexCount = 0;
