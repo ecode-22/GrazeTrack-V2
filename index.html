@@ -91,6 +91,7 @@
         <div class="sb-footer">
             <button class="sb-ftn" onclick="switchTab('dashboard')">📊<span>Dashboard</span></button>
             <button class="sb-ftn" onclick="openModal('modalExport')">⬇️<span>Export</span></button>
+            <button class="sb-ftn" onclick="openDynRestSettings()">🌧<span>Rain</span></button>
             <button class="sb-ftn" onclick="openModal('modalAbout')">ℹ️<span>About</span></button>
             <button class="sb-ftn" onclick="openSetup()">⚙️<span>Setup</span></button>
         </div>
@@ -289,6 +290,21 @@
             <div class="setup-title" id="setupTitle">Welcome</div>
             <div class="setup-body" id="setupBody"></div>
             <div class="setup-nav"><button class="btn-ghost" id="setupBack" onclick="setupBack()" style="display:none">← Back</button><button class="setup-skip" onclick="closeSetup(false)">Skip</button><button class="btn-primary" id="setupNext" onclick="setupNext()">Next →</button></div>
+        </div>
+    </div>
+
+    <!-- Dynamic Rest Settings Modal -->
+    <div class="overlay" id="modalDynRest" style="display:none">
+        <div class="modal msm">
+            <div class="mh">
+                <div class="mh-title">🌧 Dynamic Rest Targets</div>
+                <button class="mh-close" onclick="closeDynRestSettings()">✕</button>
+            </div>
+            <div class="mb" id="dynRestBody"></div>
+            <div class="mf">
+                <button class="btn-ghost" onclick="closeDynRestSettings()">Close</button>
+                <button class="btn-primary" onclick="closeDynRestSettings()">Apply</button>
+            </div>
         </div>
     </div>
 
@@ -901,7 +917,11 @@
             }
             let endBtn = activeEv ? `<button class="end-graze-btn" onclick="endGrazingToday('${activeEv.id}','${fieldId}')">⏹ End Grazing Today</button>` : '';
             document.getElementById('detailSection').style.display = 'block';
-            document.getElementById('fieldDetail').innerHTML = `<div class="detail-row"><span class="detail-key">Area</span><span class="detail-val">${field.areaHa.toFixed(2)} ha</span></div><div class="detail-row"><span class="detail-key">Status</span><span class="detail-val"><span class="pill pill-${status.cls}">${status.label}</span></span></div><div class="detail-row"><span class="detail-key">Rest</span><span class="detail-val">${restDays!==null?restDays+'d / '+field.restTarget+'d':'No events yet'}</span></div>${progHTML}${stockWarn}<div class="detail-actions"><button class="detail-btn edit" onclick="openEditFieldModal('${fieldId}')">✎ Edit</button><button class="detail-btn" onclick="openHistoryModal('${fieldId}')">History</button><button class="detail-btn primary" onclick="openGrazingModal('${fieldId}')">+ Graze</button></div>${endBtn}`;
+            const _effTgt = (typeof getEffectiveRestTarget === 'function') ? getEffectiveRestTarget(field) : field.restTarget;
+            const _ext = _effTgt - field.restTarget;
+            const _extBadge = _ext > 0 ? ` <span class="drought-badge" title="Rest target extended due to dry conditions">🌵 +${_ext}d drought</span>` : '';
+            const _restVal = restDays !== null ? `${restDays}d / ${_effTgt}d${_extBadge}` : 'No events yet';
+            document.getElementById('fieldDetail').innerHTML = `<div class="detail-row"><span class="detail-key">Area</span><span class="detail-val">${field.areaHa.toFixed(2)} ha</span></div><div class="detail-row"><span class="detail-key">Status</span><span class="detail-val"><span class="pill pill-${status.cls}">${status.label}</span></span></div><div class="detail-row"><span class="detail-key">Rest</span><span class="detail-val">${_restVal}</span></div>${progHTML}${stockWarn}<div class="detail-actions"><button class="detail-btn edit" onclick="openEditFieldModal('${fieldId}')">✎ Edit</button><button class="detail-btn" onclick="openHistoryModal('${fieldId}')">History</button><button class="detail-btn primary" onclick="openGrazingModal('${fieldId}')">+ Graze</button></div>${endBtn}`;
             document.getElementById('btnDelete').style.display = 'flex';
             let eb = document.getElementById('btnEdit');
             if (eb) eb.style.display = 'flex';
@@ -942,42 +962,29 @@
 
         function getStatus(field) {
             let events = loadEvents().filter(e => e.fieldId === field.id).sort((a, b) => b.startDate.localeCompare(a.startDate));
-            if (!events.length) return {
-                label: 'Never grazed',
-                cls: 'none'
-            };
-            let latest = events[0],
-                today = todayStr();
-            if (latest.startDate <= today && latest.endDate >= today) return {
-                label: 'Grazing now',
-                cls: 'grazing'
-            };
+            if (!events.length) return { label: 'Never grazed', cls: 'none' };
+            let latest = events[0], today = todayStr();
+            if (latest.startDate <= today && latest.endDate >= today) return { label: 'Grazing now', cls: 'grazing' };
             let rest = daysSince(latest.endDate);
-            if (rest < 0) return {
-                label: 'Planned',
-                cls: 'resting'
-            };
-            if (rest >= field.restTarget) return {
-                label: 'Ready',
-                cls: 'ready'
-            };
-            if (rest >= field.restTarget * 0.6) return {
-                label: `${rest}d rest`,
-                cls: 'resting'
-            };
-            return {
-                label: `${rest}d rest`,
-                cls: 'danger'
-            };
+            if (rest < 0) return { label: 'Planned', cls: 'resting' };
+            // Use drought-adjusted effective rest target if gt-rain.js is loaded
+            const effTarget = (typeof getEffectiveRestTarget === 'function')
+                ? getEffectiveRestTarget(field)
+                : field.restTarget;
+            if (rest >= effTarget) return { label: 'Ready', cls: 'ready' };
+            if (rest >= effTarget * 0.6) return { label: `${rest}d rest`, cls: 'resting' };
+            return { label: `${rest}d rest`, cls: 'danger' };
         }
 
         function getReadinessPct(field) {
             let events = loadEvents().filter(e => e.fieldId === field.id).sort((a, b) => b.startDate.localeCompare(a.startDate));
             if (!events.length) return 100;
-            let latest = events[0],
-                today = todayStr();
+            let latest = events[0], today = todayStr();
             if (latest.startDate <= today && latest.endDate >= today) return 0;
-            return Math.min(100, Math.round(Math.max(0, daysSince(latest.endDate)) / field.restTarget * 100));
+            const effTarget = (typeof getEffectiveRestTarget === 'function')
+                ? getEffectiveRestTarget(field)
+                : field.restTarget;
+            return Math.min(100, Math.round(Math.max(0, daysSince(latest.endDate)) / effTarget * 100));
         }
 
         function statusFillColor(field) {
@@ -1669,6 +1676,7 @@
         let deferredInstall = null;
         window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; window.deferredInstall = deferredInstall; document.getElementById('installBanner').classList.add('show'); });
     </script>
+    <script src="gt-rain.js"></script>
     <script src="gt-split.js"></script>
     <script src="gt-events.js"></script>
     <script src="gt-map.js"></script>

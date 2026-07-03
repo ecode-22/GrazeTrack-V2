@@ -276,6 +276,16 @@ async function fetchRainfall() {
             <div class="rain-total">14-day total: <strong>${total14.toFixed(1)} mm</strong></div>
             <div class="rain-section-lbl" style="margin-top:14px">Forecast</div>
             <div class="fc-row">${fcCards}</div>
+            ${(()=>{
+                const rainSt = (typeof getRainStatus === 'function') ? getRainStatus() : null;
+                if (!rainSt || !rainSt.enabled || rainSt.total14 === null) return '';
+                const clsMap = { good: 'rain-banner-good', moderate: 'rain-banner-moderate', dry: 'rain-banner-dry', drought: 'rain-banner-drought' };
+                const icon = rainSt.cls === 'good' ? '✅' : rainSt.cls === 'moderate' ? '🌤' : rainSt.cls === 'dry' ? '☀️' : '🔥';
+                return `<div class="rain-dyn-banner ${clsMap[rainSt.cls] || ''}">
+                    ${icon} ${rainSt.label}
+                    <button class="rain-dyn-cfg" onclick="openDynRestSettings()">Configure ›</button>
+                </div>`;
+            })()}
             <div style="font-size:10px;color:#9ca3af;margin-top:8px">
                 Weather: <a href="https://open-meteo.com" target="_blank" style="color:#9ca3af">Open-Meteo.com</a> (free &amp; open source)
             </div>`;
@@ -328,7 +338,12 @@ function renderRotation() {
             <div class="rot-top">
                 <div>
                     <div class="rot-name">${field.name}</div>
-                    <div class="rot-meta">${field.areaHa.toFixed(1)} ha · ${restDays !== null ? restDays + 'd resting' : 'never grazed'} · target ${field.restTarget}d</div>
+                    <div class="rot-meta">${(()=>{
+                        const eff = (typeof getEffectiveRestTarget === 'function') ? getEffectiveRestTarget(field) : field.restTarget;
+                        const ext = eff - field.restTarget;
+                        const extStr = ext > 0 ? ` <span class="drought-badge">🌵 +${ext}d</span>` : '';
+                        return `${field.areaHa.toFixed(1)} ha · ${restDays !== null ? restDays + 'd resting' : 'never grazed'} · target ${eff}d${extStr}`;
+                    })()}</div>
                 </div>
                 <span class="pill pill-${status.cls}">${status.label}</span>
             </div>
