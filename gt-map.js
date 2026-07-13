@@ -16,10 +16,26 @@ let ndviActive = false;
 // Heatmap globals
 let heatmapActive = false;
 
+// MODIS Terra was decommissioned December 2025.
+// We now use VIIRS SNPP (Suomi NPP) which is the official successor.
+// VIIRS NDVI uses 16-day composites starting from Jan 1 each year.
+// Data is available ~2 weeks after the composite end date.
+
 function _ndviRecentDate() {
     const d = new Date();
-    d.setDate(d.getDate() - 21);
-    return d.toISOString().slice(0, 10);
+    d.setDate(d.getDate() - 30); // Go back 30 days to ensure tiles exist
+    return _snapToNDVIPeriod(d.toISOString().slice(0, 10));
+}
+
+// Snap to nearest valid 16-day VIIRS composite period (from Jan 1 each year)
+function _snapToNDVIPeriod(dateStr) {
+    const d     = new Date(dateStr + 'T12:00:00Z');
+    const start = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const doy   = Math.floor((d - start) / 86400000);
+    const period = Math.floor(doy / 16) * 16;
+    const snap  = new Date(start);
+    snap.setUTCDate(1 + period);
+    return snap.toISOString().slice(0, 10);
 }
 
 function toggleNDVIPanel() {
@@ -48,22 +64,63 @@ function toggleNDVIPanel() {
 
 function applyNDVI() {
     _removeNDVI();
-    const dateInput = document.getElementById('ndviDate');
+    const dateInput    = document.getElementById('ndviDate');
     const opacityInput = document.getElementById('ndviOpacity');
-    const date = dateInput ? dateInput.value : _ndviRecentDate();
+
+    const rawDate = dateInput ? dateInput.value : _ndviRecentDate();
+    const date    = _snapToNDVIPeriod(rawDate || _ndviRecentDate());
+
+    if (dateInput && dateInput.value && dateInput.value !== date) {
+        dateInput.value = date;
+    }
+
     const opacity = opacityInput ? parseFloat(opacityInput.value) : 0.7;
 
-    ndviLayer = L.tileLayer(
-        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_8Day/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`, {
-            attribution: '🛰 NASA GIBS',
+    setStatus(`🛰️ Loading NDVI for ${date}…`);
+
+    // VIIRS SNPP (Suomi NPP) — official successor to MODIS Terra (decommissioned Dec 2025)
+    // Layer: VIIRS_SNPP_NDVI_8Day, 16-day composites, available from 2012 onwards
+    const primaryLayer   = 'VIIRS_SNPP_NDVI_8Day';
+    const fallbackLayer  = 'MODIS_Aqua_NDVI_8Day'; // Aqua ran until Aug 2026
+
+    function tryLayer(layerName, isFallback) {
+        const url = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`;
+        const layer = L.tileLayer(url, {
+            attribution:   '🛰 NASA GIBS / VIIRS',
             maxNativeZoom: 9,
-            maxZoom: 20,
-            opacity: opacity,
-            tileSize: 256
-        }
-    );
-    ndviLayer.addTo(map);
-    ndviLayer.on('tileerror', () => setStatus('⚠ NDVI tiles unavailable for this date.'));
+            maxZoom:       20,
+            opacity:       opacity,
+            tileSize:      256,
+            crossOrigin:   true
+        });
+
+        let tilesLoaded = 0;
+        let tileErrors  = 0;
+
+        layer.on('tileload', () => {
+            tilesLoaded++;
+            if (tilesLoaded === 1) {
+                setStatus(`🛰️ NDVI loaded (${isFallback ? 'MODIS Aqua' : 'VIIRS'}) — ${date}. Green = healthy growth.`);
+            }
+        });
+
+        layer.on('tileerror', () => {
+            tileErrors++;
+            if (tileErrors === 3 && tilesLoaded === 0 && !isFallback) {
+                // Primary failed — try fallback
+                map.removeLayer(layer);
+                ndviLayer = null;
+                tryLayer(fallbackLayer, true);
+            } else if (tileErrors >= 3 && tilesLoaded === 0 && isFallback) {
+                setStatus(`⚠️ No NDVI data for ${date} — try an earlier date (data has ~30 day lag)`);
+            }
+        });
+
+        layer.addTo(map);
+        ndviLayer = layer;
+    }
+
+    tryLayer(primaryLayer, false);
 }
 
 function _removeNDVI() {

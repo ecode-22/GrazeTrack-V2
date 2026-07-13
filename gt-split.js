@@ -157,32 +157,35 @@ function asSave() {
         areaHa:     c.areaHa,
         color:      c.color,
         createdAt:  new Date().toISOString(),
-        version:    DB_VERSION
+        version:    (typeof DB_VERSION !== 'undefined') ? DB_VERSION : 4
     }));
 
+    // Persist to storage
     saveFields([...loadFields(), ...newFields]);
 
-    // Replace preview layers with proper styled field layers
+    // Tear down preview layers
     _asClearCampLayers();
-    if (AS.campGroup) { try { map.removeLayer(AS.campGroup); } catch(e) {} AS.campGroup = null; }
+    if (AS.campGroup)     { try { map.removeLayer(AS.campGroup);     } catch(e) {} AS.campGroup = null; }
     if (AS.boundaryLayer) { try { map.removeLayer(AS.boundaryLayer); } catch(e) {} AS.boundaryLayer = null; }
 
-    newFields.forEach(field => {
-        try {
-            const layer = L.geoJSON(field.geometry).getLayers()[0];
-            if (layer) { styleLayer(layer, field); bindFieldLayer(layer, field); drawnItems.addLayer(layer); }
-        } catch(e) {}
-    });
+    // Redraw ALL fields from storage — same path used on app startup, most robust
+    try {
+        if (typeof drawnItems !== 'undefined' && drawnItems) drawnItems.clearLayers();
+        if (typeof restoreFieldsOnMap === 'function') restoreFieldsOnMap();
+    } catch(e) { console.error('[AutoSplit] restoreFieldsOnMap failed:', e); }
 
-    renderFieldList();
-    updateStats();
+    if (typeof renderFieldList === 'function') renderFieldList();
+    if (typeof updateStats     === 'function') updateStats();
 
+    // Close the panel
     const panel = document.getElementById('asSplitPanel');
     if (panel) panel.classList.remove('open');
     AS.boundary = null; AS.camps = []; window._asSplitMode = false;
 
-    setStatus(`✅ ${newFields.length} camp${newFields.length!==1?'s':''} created.`);
-    if (newFields.length) setTimeout(() => selectField(newFields[0].id), 300);
+    setStatus(`✅ ${newFields.length} camp${newFields.length !== 1 ? 's' : ''} created.`);
+    if (newFields.length && typeof selectField === 'function') {
+        setTimeout(() => selectField(newFields[0].id), 300);
+    }
 }
 
 // ── Panel render ──────────────────────────────────────────────
