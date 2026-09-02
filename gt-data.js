@@ -14,8 +14,7 @@ function save(k, v) {
         localStorage.setItem(k, JSON.stringify(v));
         updateStorageBar();
         checkStorageWarn();
-        // Sync to Supabase if user is logged in (defined in gt-auth.js)
-        if (typeof scheduleSyncToSupabase === 'function') scheduleSyncToSupabase();
+        // Cloud sync is temporarily disabled; data stays in localStorage.
     } catch (e) {
         if (e.name === 'QuotaExceededError') alert('Storage full! Export a backup first.');
     }

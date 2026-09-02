@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <!-- Supabase/auth temporarily disabled. -->
 </head>
 
 <body>
@@ -82,8 +82,7 @@
             <div id="fieldDetail"></div>
         </div>
 
-        <!-- Cloud account area — populated by gt-auth.js -->
-        <div class="sb-account" id="sbAccountArea"></div>
+        <!-- Cloud account area temporarily disabled. -->
 
         <div class="sb-storage">
             <div class="stor-track">
@@ -182,10 +181,9 @@
     </main>
 
 
-    <!-- ═══════════════════════════════════════════════════════
-         Auth Modal — Login / Create Account
-         ═══════════════════════════════════════════════════════ -->
-    <div class="overlay" id="modalAuth" style="display:none" onclick="if(event.target===this)closeAuthModal()">
+        <!-- Auth modal temporarily disabled. Kept in a template for later restoration. -->
+        <template id="disabledAuthModal">
+        <div class="overlay" id="modalAuth" style="display:none" onclick="if(event.target===this)closeAuthModal()">
         <div class="modal auth-modal">
             <div class="auth-modal-inner">
 
@@ -256,6 +254,7 @@
             </div>
         </div>
     </div>
+        </template>
 
     <div class="overlay" id="modalName" style="display:none">
         <div class="modal msm">
@@ -443,7 +442,7 @@
                         if (btn) btn.style.display = 'flex';
                     }
                 } catch (e) {}
-                if (typeof initAuth === 'function') initAuth();
+                // Auth and Supabase are temporarily disabled.
             }, 100);
         });
     </script>
@@ -453,7 +452,7 @@
     <script src="gt-dashboard.js"></script>
     <script src="gt-analytics.js"></script>
     <script src="gt-data.js"></script>
-    <script src="gt-auth.js"></script>
+    <!-- <script src="gt-auth.js"></script> -->
     <script src="gt-utils.js"></script>
     <script src="gt-offline.js"></script>
     <script src="setup.js"></script>
