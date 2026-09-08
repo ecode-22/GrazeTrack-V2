@@ -1,7 +1,7 @@
 // GrazingTrack Service Worker v4
 // Caches app shell for offline use + map tiles as you browse
 
-const CACHE_APP = 'gt-app-v15';
+const CACHE_APP = 'gt-app-v25';
 const CACHE_TILES = 'gt-tiles-v1';
 
 const APP_SHELL = [

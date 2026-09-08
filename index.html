@@ -9,10 +9,10 @@
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
-    <link rel="stylesheet" href="style.css?v=8">
+    <link rel="stylesheet" href="style.css?v=9">
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <!-- Supabase/auth temporarily disabled. -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
@@ -80,7 +80,7 @@
             <div id="fieldDetail"></div>
         </div>
 
-        <!-- Cloud account area temporarily disabled. -->
+        <div class="sb-account" id="sbAccountArea"></div>
 
         <div class="sb-storage">
             <div class="stor-track">
@@ -179,8 +179,7 @@
     </main>
 
 
-        <!-- Auth modal temporarily disabled. Kept in a template for later restoration. -->
-        <template id="disabledAuthModal">
+        <!-- Optional account and multi-device sync modal. -->
         <div class="overlay" id="modalAuth" style="display:none" onclick="if(event.target===this)closeAuthModal()">
         <div class="modal auth-modal">
             <div class="auth-modal-inner">
@@ -244,6 +243,10 @@
                             <label class="auth-label">Confirm password</label>
                             <input id="authPassConfirm" class="auth-input" type="password" placeholder="Same password again" autocomplete="new-password">
                         </div>
+                        <label class="sync-choice">
+                            <input id="authSyncEnabled" type="checkbox">
+                            <span><strong>Use GrazingTrack on multiple devices</strong><small>Sync fields, grazing events, and animal groups across your phone and computer. Leave this off for device-only storage.</small></span>
+                        </label>
                         <button class="auth-submit btn-primary" data-label="Create account" onclick="submitSignUp()">Create account</button>
                         <button class="auth-switch-link" onclick="_switchAuthTab('signin')">Already have an account? Sign in &rarr;</button>
                     </div>
@@ -252,7 +255,6 @@
             </div>
         </div>
     </div>
-        </template>
 
     <div class="overlay" id="modalName" style="display:none">
         <div class="modal msm">
@@ -440,20 +442,21 @@
                         if (btn) btn.style.display = 'flex';
                     }
                 } catch (e) {}
-                // Auth and Supabase are temporarily disabled.
+                // Auth initializes after the app shell is ready.
             }, 100);
         });
     </script>
     <script src="gt-split.js"></script>
     <script src="gt-events.js"></script>
-    <script src="gt-map.js?v=14"></script>
-    <script src="gt-dashboard.js"></script>
-    <script src="gt-analytics.js"></script>
+    <script src="gt-map.js?v=15"></script>
+    <script src="gt-rain.js?v=2"></script>
+    <script src="gt-dashboard.js?v=2"></script>
+    <script src="gt-analytics.js?v=4"></script>
     <script src="gt-data.js"></script>
-    <!-- <script src="gt-auth.js"></script> -->
+    <script src="gt-auth.js?v=5"></script>
     <script src="gt-utils.js"></script>
     <script src="gt-offline.js"></script>
-    <script src="setup.js"></script>
+    <script src="setup.js?v=3"></script>
 
     <style>
         /* Additional styles */

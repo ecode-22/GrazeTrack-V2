@@ -184,7 +184,28 @@ function getFarmCenter() {
     const fields = loadFields();
     if (!fields.length) return null;
     const lats = [], lngs = [];
-    fields.forEach(f => f.geometry.coordinates[0].forEach(([lng, lat]) => { lats.push(lat); lngs.push(lng); }));
+    const collect = geometry => {
+        if (!geometry) return;
+        if (geometry.type === 'Polygon') {
+            geometry.coordinates.forEach(ring => ring.forEach(point => {
+                const lng = Number(point[0]), lat = Number(point[1]);
+                if (Number.isFinite(lng) && Number.isFinite(lat)) { lats.push(lat); lngs.push(lng); }
+            }));
+        } else if (geometry.type === 'MultiPolygon') {
+            geometry.coordinates.forEach(polygon => polygon.forEach(ring => ring.forEach(point => {
+                const lng = Number(point[0]), lat = Number(point[1]);
+                if (Number.isFinite(lng) && Number.isFinite(lat)) { lats.push(lat); lngs.push(lng); }
+            })));
+        }
+    };
+    fields.forEach(f => collect(f.geometry));
+    if (!lats.length || !lngs.length) {
+        if (typeof map !== 'undefined' && map) {
+            const center = map.getCenter();
+            if (center && Number.isFinite(center.lat) && Number.isFinite(center.lng)) return { lat: center.lat, lng: center.lng };
+        }
+        return null;
+    }
     return { lat: (Math.min(...lats) + Math.max(...lats)) / 2, lng: (Math.min(...lngs) + Math.max(...lngs)) / 2 };
 }
 
@@ -274,8 +295,11 @@ async function fetchRainfall() {
             <div class="card-title">🌧 Rainfall &amp; 7-Day Forecast</div>
             <div class="rain-section-lbl">Past 14 days</div>
             <div class="rain-bars">${histBars}</div>
-            <div class="rain-total">14-day total: <strong>${total14.toFixed(1)} mm</strong></div>
             <div class="rain-section-lbl" style="margin-top:14px">Forecast</div>
+            <div class="rain-summary">
+                <div class="rain-summary-main"><span class="rain-summary-value">${total14.toFixed(1)}</span><span class="rain-summary-unit">mm</span></div>
+                <div class="rain-summary-copy"><strong>Rain received</strong><span>Past 14 days · ${center.lat.toFixed(2)}, ${center.lng.toFixed(2)}</span></div>
+            </div>
             <div class="fc-row">${fcCards}</div>
             ${(()=>{
                 const rainSt = (typeof getRainStatus === 'function') ? getRainStatus() : null;
@@ -291,7 +315,12 @@ async function fetchRainfall() {
                 Weather: <a href="https://open-meteo.com" target="_blank" style="color:#9ca3af">Open-Meteo.com</a> (free &amp; open source)
             </div>`;
     } catch (err) {
-        el.innerHTML = '<div class="card-title">🌧 Rainfall &amp; Forecast</div><p style="color:#9ca3af;font-size:12px">Could not load — check internet connection.</p>';
+        el.innerHTML = `<div class="card-title">🌧 Rainfall &amp; Forecast</div>
+            <div class="weather-error" role="alert">
+                <strong>Weather data unavailable</strong>
+                <span>Check your connection, then try again.</span>
+                <button class="weather-retry" onclick="fetchRainfall()">↻ Try again</button>
+            </div>`;
     }
 }
 

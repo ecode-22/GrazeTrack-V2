@@ -14,7 +14,7 @@ function save(k, v) {
         localStorage.setItem(k, JSON.stringify(v));
         updateStorageBar();
         checkStorageWarn();
-        // Cloud sync is temporarily disabled; data stays in localStorage.
+        if (typeof scheduleSyncToSupabase === 'function') scheduleSyncToSupabase();
     } catch (e) {
         if (e.name === 'QuotaExceededError') alert('Storage full! Export a backup first.');
     }
@@ -53,6 +53,7 @@ function saveGroups(groups) {
         cfg.animalGroups = groups;
         localStorage.setItem('gt_config', JSON.stringify(cfg));
         updateStorageBar();
+        if (typeof scheduleSyncToSupabase === 'function') scheduleSyncToSupabase();
     } catch (e) {}
     window._animalGroups = groups;
 }

@@ -3,9 +3,10 @@
 // ============================================================
 
 let setupStep = 1;
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 let setupData = {
+  storageMode: 'local',
     farmName: '',
     farmLocation: { lat: null, lng: null },
     animalGroups: [],
@@ -30,6 +31,7 @@ function checkFirstRun() {
 function openSetup() {
     setupStep = 1;
     setupData = {
+      storageMode: localStorage.getItem('gt_sync_enabled') === '1' ? 'cloud' : 'local',
         farmName: '',
         farmLocation: { lat: null, lng: null },
         animalGroups: [],
@@ -67,11 +69,31 @@ function renderSetupStep() {
     document.getElementById('setupBack').style.display = setupStep > 1 ? 'flex' : 'none';
     document.getElementById('setupNext').textContent = setupStep === TOTAL_STEPS ? 'Finish setup ✓' : 'Next →';
 
-    if (setupStep === 1) renderStep1(title, body);
-    if (setupStep === 2) renderStep2(title, body);
-    if (setupStep === 3) renderStep3(title, body);
-    if (setupStep === 4) renderStep4(title, body);
-    if (setupStep === 5) renderStep5(title, body);
+    if (setupStep === 1) renderStorageStep(title, body);
+    if (setupStep === 2) renderStep1(title, body);
+    if (setupStep === 3) renderStep2(title, body);
+    if (setupStep === 4) renderStep3(title, body);
+    if (setupStep === 5) renderStep4(title, body);
+    if (setupStep === 6) renderStep5(title, body);
+}
+
+function renderStorageStep(title, body) {
+    title.textContent = '🔒 Choose how to store your data';
+    body.innerHTML = `
+    <p class="setup-desc">Choose whether GrazingTrack should stay on this device or sync your farm across multiple devices.</p>
+    <div class="setup-storage-options setup-storage-options-first">
+      <button type="button" class="setup-storage-card ${setupData.storageMode === 'local' ? 'selected' : ''}" onclick="selectStorageMode('local')">
+        <span class="setup-storage-icon">📱</span><span><strong>This device only</strong><small>Keep working offline. Nothing is uploaded.</small></span><span class="setup-storage-check">✓</span>
+      </button>
+      <button type="button" class="setup-storage-card ${setupData.storageMode === 'cloud' ? 'selected' : ''}" onclick="selectStorageMode('cloud')">
+        <span class="setup-storage-icon">☁️</span><span><strong>Multiple devices</strong><small>Use your farm on a phone, tablet, and computer.</small></span><span class="setup-storage-check">✓</span>
+      </button>
+    </div>
+    <div class="setup-cloud-actions" style="display:${setupData.storageMode === 'cloud' ? 'flex' : 'none'}">
+      <span>Already have an account?</span>
+      <button type="button" onclick="openSetupAuth('signin')">Sign in</button>
+      <button type="button" class="setup-cloud-primary" onclick="openSetupAuth('signup')">Create account</button>
+    </div>`;
 }
 
 function renderStep1(title, body) {
@@ -94,6 +116,23 @@ function renderStep1(title, body) {
     <div class="setup-tip">💡 <strong>Tip:</strong> Open Google Maps, right-click your farm, and copy the coordinates shown at the top of the menu.</div>`;
 }
 
+function selectStorageMode(mode) {
+    setupData.storageMode = mode;
+    localStorage.setItem('gt_sync_enabled', mode === 'cloud' ? '1' : '0');
+    renderSetupStep();
+}
+
+function openSetupAuth(tab) {
+    localStorage.setItem('gt_sync_enabled', '1');
+    if (typeof openAuthModal === 'function') {
+        openAuthModal(tab);
+        const checkbox = document.getElementById('authSyncEnabled');
+        if (checkbox) checkbox.checked = true;
+    } else {
+        alert('Account services are still loading. Please try again in a moment.');
+    }
+}
+
 function autoLocate() {
     if (!navigator.geolocation) { alert('GPS not available on this device.'); return; }
     navigator.geolocation.getCurrentPosition(pos => {
@@ -109,6 +148,19 @@ function validateStep1() {
     const lat = parseFloat(document.getElementById('s1Lat').value);
     const lng = parseFloat(document.getElementById('s1Lng').value);
     if (!isNaN(lat) && !isNaN(lng)) setupData.farmLocation = { lat, lng };
+    return true;
+  }
+
+  function validateStorageStep() {
+    if (setupData.storageMode === 'cloud') {
+      if (typeof isSignedIn === 'function' && !isSignedIn()) {
+        alert('Choose Sign in or Create account before continuing with multiple-device sync.');
+        return false;
+      }
+      localStorage.setItem('gt_sync_enabled', '1');
+    } else {
+      localStorage.setItem('gt_sync_enabled', '0');
+    }
     return true;
 }
 
@@ -275,17 +327,18 @@ function renderStep5(title, body) {
 
 function setupNext() {
   let valid = true;
-  if (setupStep === 1) valid = validateStep1();
-  if (setupStep === 2) valid = validateStep2();
-  if (setupStep === 3) valid = validateStep3();
-  if (setupStep === 4) valid = validateStep4();
+  if (setupStep === 1) valid = validateStorageStep();
+  if (setupStep === 2) valid = validateStep1();
+  if (setupStep === 3) valid = validateStep2();
+  if (setupStep === 4) valid = validateStep3();
+  if (setupStep === 5) valid = validateStep4();
   if (!valid) return;
   if (setupStep === TOTAL_STEPS) { closeSetup(true); return; }
-  if (setupStep === 4 && setupMap) { setupMap.remove(); setupMap = null; }
+  if (setupStep === 5 && setupMap) { setupMap.remove(); setupMap = null; }
   setupStep++; renderSetupStep();
 }
 
-function setupBack() { if (setupStep === 1) return; if (setupStep === 4 && setupMap) { setupMap.remove(); setupMap = null; } setupStep--; renderSetupStep(); }
+function setupBack() { if (setupStep === 1) return; if (setupStep === 5 && setupMap) { setupMap.remove(); setupMap = null; } setupStep--; renderSetupStep(); }
 
 function applySetupToApp() {
   const config = { farmName: setupData.farmName, farmLocation: setupData.farmLocation, animalGroups: setupData.animalGroups, grazingCycle: setupData.grazingCycle, dayNightConfig: setupData.dayNightConfig, setupAt: new Date().toISOString() };

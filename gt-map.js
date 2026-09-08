@@ -682,8 +682,9 @@ function getStatus(field) {
     if (latest.startDate <= today && latest.endDate >= today) return { label: 'Grazing now', cls: 'grazing' };
     const rest = daysSince(latest.endDate);
     if (rest < 0) return { label: 'Planned', cls: 'resting' };
-    if (rest >= field.restTarget) return { label: 'Ready', cls: 'ready' };
-    if (rest >= field.restTarget * 0.6) return { label: `${rest}d rest`, cls: 'resting' };
+    const target = typeof getEffectiveRestTarget === 'function' ? getEffectiveRestTarget(field) : field.restTarget;
+    if (rest >= target) return { label: 'Ready', cls: 'ready' };
+    if (rest >= target * 0.6) return { label: `${rest}d / ${target}d rest`, cls: 'resting' };
     return { label: 'Needs rest', cls: 'danger' };
 }
 
@@ -693,7 +694,8 @@ function getReadinessPct(field) {
     const latest = events[0],
         today = todayStr();
     if (latest.startDate <= today && latest.endDate >= today) return 0;
-    return Math.min(100, Math.round(Math.max(0, daysSince(latest.endDate)) / field.restTarget * 100));
+    const target = typeof getEffectiveRestTarget === 'function' ? getEffectiveRestTarget(field) : field.restTarget;
+    return Math.min(100, Math.round(Math.max(0, daysSince(latest.endDate)) / target * 100));
 }
 
 function statusFillColor(field) {

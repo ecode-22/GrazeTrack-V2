@@ -6,7 +6,7 @@
 
 // ── CONFIG — replace with your Supabase project values ───────
 //   Dashboard → Settings → API → Project URL / anon public key
-const SUPABASE_URL      = 'sb_publishable_7un76FuhgSCl-YEd1JhFNw_fKnSKpz-';
+const SUPABASE_URL      = 'https://lxspgtuvwsjabnrkmm.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4c3BndHV3c2phYnJpbW5ncmttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MDc5NTAsImV4cCI6MjA5OTE4Mzk1MH0.Zs7d6ZmaLhePZ2I6UY_maSN1z_6hXRldUJvWQknt5yc ';
 
 // ── Globals ───────────────────────────────────────────────────
@@ -16,6 +16,14 @@ window._sb = _sb; // exposed so gt-data.js can call scheduleSyncToSupabase
 let _currentUser  = null;
 let _syncTimer    = null;
 let _syncPending  = false;
+
+function isSignedIn() {
+    return !!_currentUser;
+}
+
+function isCloudSyncEnabled() {
+    return localStorage.getItem('gt_sync_enabled') === '1';
+}
 
 // ── Boot ──────────────────────────────────────────────────────
 async function initAuth() {
@@ -59,6 +67,11 @@ async function authSignOut() {
 // Called when user logs in.  Cloud wins if they have cloud data;
 // otherwise we upload whatever is already in localStorage.
 async function _onSignIn(user, showStatus) {
+    if (!isCloudSyncEnabled()) {
+        _showSyncDot('idle');
+        if (showStatus) setStatus('Signed in — this device only');
+        return;
+    }
     if (showStatus) setStatus('☁️ Signing in — syncing your data…');
     try {
         const { data, error } = await _sb
@@ -97,7 +110,7 @@ function _onSignOut() {
 
 // Called by gt-data.js save() after every local write
 function scheduleSyncToSupabase() {
-    if (!_currentUser) return;
+    if (!_currentUser || !isCloudSyncEnabled()) return;
     _syncPending = true;
     _showSyncDot('pending');
     if (_syncTimer) clearTimeout(_syncTimer);
@@ -109,7 +122,7 @@ function scheduleSyncToSupabase() {
 }
 
 async function _pushNow() {
-    if (!_currentUser) return;
+    if (!_currentUser || !isCloudSyncEnabled()) return;
     try {
         const fields = JSON.parse(localStorage.getItem('gt_fields') || '[]');
         const events = JSON.parse(localStorage.getItem('gt_events') || '[]');
@@ -251,12 +264,14 @@ async function submitSignUp() {
     const email = document.getElementById('authEmailNew').value.trim();
     const pass  = document.getElementById('authPassNew').value;
     const pass2 = document.getElementById('authPassConfirm').value;
+    const syncEnabled = document.getElementById('authSyncEnabled')?.checked === true;
     if (!email || !pass)  { _setAuthMsg('Please fill in all fields.', true); return; }
     if (pass !== pass2)   { _setAuthMsg('Passwords do not match.', true); return; }
     if (pass.length < 6)  { _setAuthMsg('Password must be at least 6 characters.', true); return; }
     _clearAuthMsg();
     _setAuthLoading(true);
     try {
+        localStorage.setItem('gt_sync_enabled', syncEnabled ? '1' : '0');
         await authSignUp(email, pass);
         document.getElementById('authSuccess').style.display = 'block';
         _setAuthMsg('Account created! Check your email to confirm, then sign in.', false);
@@ -266,6 +281,10 @@ async function submitSignUp() {
         _setAuthLoading(false);
     }
 }
+
+window.addEventListener('load', () => {
+    if (typeof supabase !== 'undefined') initAuth();
+});
 
 // Allow Enter key to submit
 document.addEventListener('keydown', e => {

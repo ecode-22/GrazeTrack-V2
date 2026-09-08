@@ -71,7 +71,7 @@ async function fetchRainData() {
             `https://api.open-meteo.com/v1/forecast` +
             `?latitude=${center.lat.toFixed(4)}&longitude=${center.lng.toFixed(4)}` +
             `&daily=precipitation_sum` +
-            `&past_days=14&forecast_days=0&timezone=auto`;
+            `&past_days=14&forecast_days=1&timezone=auto`;
 
         const res  = await fetch(url);
         if (!res.ok) return null;

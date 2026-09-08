@@ -44,7 +44,7 @@ function renderAnalytics() {
     const restCompliance = fields.map(f => ({
         name: f.name,
         pct: getReadinessPct(f),
-        target: f.restTarget,
+        target: typeof getEffectiveRestTarget === 'function' ? getEffectiveRestTarget(f) : f.restTarget,
         status: getStatus(f),
         area: f.areaHa,
         color: f.color
@@ -96,6 +96,9 @@ function renderAnalytics() {
         };
     });
 
+    const hasStockingData = fields.some(f => events.some(e => e.fieldId === f.id));
+    const compliancePreview = restCompliance.slice(0, 8);
+
     // Build the analytics HTML
     const html = `
     <div class="sv">
@@ -134,25 +137,22 @@ function renderAnalytics() {
         </div>
 
         <div class="analytics-grid" style="margin-top:20px">
-            <!-- Rest Compliance Bar Chart -->
+            <!-- Rest Compliance Summary -->
             <div class="analytics-card">
                 <div class="analytics-card-title">📈 Rest Compliance by Field</div>
-                <div class="bar-chart">
-                    ${restCompliance.map(f => {
+                <div class="rest-list">
+                    ${compliancePreview.map(f => {
                         const cls = f.pct >= 100 ? 'good' : f.pct >= 50 ? 'warn' : 'bad';
                         return `
-                        <div class="bar-col" title="${f.name}: ${f.pct}%">
-                            <div class="bar-value">${f.pct}%</div>
-                            <div class="bar-fill ${cls}" style="height:${Math.max(4, f.pct * 1.6)}px"></div>
-                            <div class="bar-label">${f.name.length > 10 ? f.name.slice(0, 9) + '…' : f.name}</div>
+                        <div class="rest-list-row">
+                            <span class="rest-status-dot ${cls}"></span>
+                            <span class="rest-field-name">${escapeHtml(f.name)}</span>
+                            <span class="rest-progress"><span class="rest-progress-fill ${cls}" style="width:${Math.min(100, f.pct)}%"></span></span>
+                            <strong class="rest-pct">${f.pct}%</strong>
                         </div>`;
                     }).join('')}
                 </div>
-                <div style="display:flex;gap:12px;margin-top:12px;font-size:10px;color:var(--text-muted);justify-content:center">
-                    <span>🟢 Ready (≥100%)</span>
-                    <span>🟡 In Progress (50-99%)</span>
-                    <span>🔴 Needs Attention (&lt;50%)</span>
-                </div>
+                ${restCompliance.length > compliancePreview.length ? `<p class="analytics-note">Showing 8 fields needing attention first. See Field Performance Overview for all ${restCompliance.length} fields.</p>` : ''}
             </div>
 
             <!-- Farm Area Breakdown (Donut) -->
@@ -163,13 +163,13 @@ function renderAnalytics() {
                 </div>
             </div>
 
-            <!-- Grazing Activity Timeline -->
+            ${events.length ? `<!-- Grazing Activity Timeline -->
             <div class="analytics-card">
                 <div class="analytics-card-title">📅 Monthly Grazing Activity</div>
                 <div class="bar-chart" style="height:140px">
                     ${last6Months.map(m => {
                         const maxCount = Math.max(...last6Months.map(x => x.count), 1);
-                        const h = Math.max(4, (m.count / maxCount) * 110);
+                        const h = Math.min(110, Math.max(4, (m.count / maxCount) * 110));
                         return `
                         <div class="bar-col">
                             <div class="bar-value">${m.count}</div>
@@ -178,7 +178,7 @@ function renderAnalytics() {
                         </div>`;
                     }).join('')}
                 </div>
-            </div>
+            </div>` : ''}
 
             <!-- Field Performance Table -->
             <div class="analytics-card wide">
@@ -226,13 +226,13 @@ function renderAnalytics() {
                 </div>
             </div>
 
-            <!-- Stocking Rate Summary -->
+            ${hasStockingData ? `<!-- Stocking Rate Summary -->
             <div class="analytics-card">
                 <div class="analytics-card-title">📊 Stocking Rate Summary</div>
                 ${buildStockingSummary(fields, events)}
-            </div>
+            </div>` : ''}
 
-            <!-- Animal Groups Summary -->
+            ${groups.length ? `<!-- Animal Groups Summary -->
             <div class="analytics-card">
                 <div class="analytics-card-title">🐄 Animal Groups</div>
                 ${groups.length ? groups.map(g => `
@@ -243,7 +243,7 @@ function renderAnalytics() {
                             <div class="grp-row-sub">${g.count} ${g.type}${g.herd ? ' · ' + escapeHtml(g.herd) : ''}</div>
                         </div>
                     </div>`).join('') : '<p style="color:var(--text-muted);font-size:12px">No animal groups defined yet.</p>'}
-            </div>
+            </div>` : ''}
         </div>
     </div>`;
 
