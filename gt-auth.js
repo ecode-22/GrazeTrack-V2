@@ -7,7 +7,7 @@
 // ── CONFIG — replace with your Supabase project values ───────
 //   Dashboard → Settings → API → Project URL / anon public key
 const SUPABASE_URL      = 'https://lxspgtuvwsjabnrkmm.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4c3BndHV3c2phYnJpbW5ncmttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MDc5NTAsImV4cCI6MjA5OTE4Mzk1MH0.Zs7d6ZmaLhePZ2I6UY_maSN1z_6hXRldUJvWQknt5yc ';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4c3BndHV3c2phYnJpbW5ncmttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MDc5NTAsImV4cCI6MjA5OTE4Mzk1MH0.Zs7d6ZmaLhePZ2I6UY_maSN1z_6hXRldUJvWQknt5yc';
 
 // ── Globals ───────────────────────────────────────────────────
 const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
