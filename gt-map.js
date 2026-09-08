@@ -4,6 +4,7 @@
 'use strict';
 
 let map, drawnItems, drawControl;
+let satelliteBaseLayer = null;
 let pendingLayer = null;
 let selectedFieldId = null;
 let currentTool = 'select';
@@ -12,6 +13,9 @@ let vertexCount = 0;
 // NDVI globals
 let ndviLayer = null;
 let ndviActive = false;
+let ndviRequestId = 0;
+let ndviFieldMask = null;
+let ndviFieldOutline = null;
 
 // Heatmap globals
 let heatmapActive = false;
@@ -23,16 +27,16 @@ let heatmapActive = false;
 
 function _ndviRecentDate() {
     const d = new Date();
-    d.setDate(d.getDate() - 30); // Go back 30 days to ensure tiles exist
+    d.setDate(d.getDate() - 45); // Satellite products are published with a delay
     return _snapToNDVIPeriod(d.toISOString().slice(0, 10));
 }
 
-// Snap to nearest valid 16-day VIIRS composite period (from Jan 1 each year)
+// Snap to the MODIS 8-day composite calendar used by the GIBS layer.
 function _snapToNDVIPeriod(dateStr) {
     const d     = new Date(dateStr + 'T12:00:00Z');
     const start = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     const doy   = Math.floor((d - start) / 86400000);
-    const period = Math.floor(doy / 16) * 16;
+    const period = Math.floor(doy / 8) * 8;
     const snap  = new Date(start);
     snap.setUTCDate(1 + period);
     return snap.toISOString().slice(0, 10);
@@ -75,44 +79,61 @@ function applyNDVI() {
     }
 
     const opacity = opacityInput ? parseFloat(opacityInput.value) : 0.7;
+    _showNDVIFieldFocus();
 
-    setStatus(`🛰️ Loading NDVI for ${date}…`);
+    const requestId = ++ndviRequestId;
+    const layerCandidates = ['MODIS_Terra_NDVI_8Day', 'VIIRS_NOAA20_NDVI_8Day', 'VIIRS_SNPP_NDVI_8Day'];
+    const dateCandidates = [];
+    const requested = new Date(`${date}T12:00:00Z`);
+    for (let i = 0; i < 10; i++) {
+        const candidate = new Date(requested);
+        candidate.setUTCDate(candidate.getUTCDate() - i * 8);
+        dateCandidates.push(candidate.toISOString().slice(0, 10));
+    }
 
-    // VIIRS SNPP (Suomi NPP) — official successor to MODIS Terra (decommissioned Dec 2025)
-    // Layer: VIIRS_SNPP_NDVI_8Day, 16-day composites, available from 2012 onwards
-    const primaryLayer   = 'VIIRS_SNPP_NDVI_8Day';
-    const fallbackLayer  = 'MODIS_Aqua_NDVI_8Day'; // Aqua ran until Aug 2026
+    setStatus(`🛰️ Finding the latest available vegetation image…`);
 
-    function tryLayer(layerName, isFallback) {
-        const url = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`;
+    function tryCandidate(layerIndex, dateIndex) {
+        if (requestId !== ndviRequestId) return;
+        if (layerIndex >= layerCandidates.length) {
+            if (dateIndex < dateCandidates.length - 1) return tryCandidate(0, dateIndex + 1);
+            setStatus('⚠️ No vegetation image is available for these dates. Try an earlier date.');
+            return;
+        }
+
+        const layerName = layerCandidates[layerIndex];
+        const candidateDate = dateCandidates[dateIndex];
+        const url = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${candidateDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`;
         const layer = L.tileLayer(url, {
-            attribution:   '🛰 NASA GIBS / VIIRS',
+            attribution:   '🛰 NASA GIBS / MODIS',
+            pane:          'ndviPane',
             maxNativeZoom: 9,
             maxZoom:       20,
-            opacity:       opacity,
+            opacity:       Math.min(0.82, opacity),
             tileSize:      256,
+            className:     'ndvi-layer',
             crossOrigin:   true
         });
 
         let tilesLoaded = 0;
-        let tileErrors  = 0;
+        let tileErrors = 0;
+        let settled = false;
 
         layer.on('tileload', () => {
             tilesLoaded++;
-            if (tilesLoaded === 1) {
-                setStatus(`🛰️ NDVI loaded (${isFallback ? 'MODIS Aqua' : 'VIIRS'}) — ${date}. Green = healthy growth.`);
+            if (tilesLoaded === 1 && !settled && requestId === ndviRequestId) {
+                settled = true;
+                setStatus(`🛰️ Vegetation loaded — ${candidateDate}. Brown = sparse, green = healthy growth.`);
             }
         });
 
         layer.on('tileerror', () => {
             tileErrors++;
-            if (tileErrors === 3 && tilesLoaded === 0 && !isFallback) {
-                // Primary failed — try fallback
+            if (tileErrors >= 2 && tilesLoaded === 0 && !settled) {
+                settled = true;
                 map.removeLayer(layer);
                 ndviLayer = null;
-                tryLayer(fallbackLayer, true);
-            } else if (tileErrors >= 3 && tilesLoaded === 0 && isFallback) {
-                setStatus(`⚠️ No NDVI data for ${date} — try an earlier date (data has ~30 day lag)`);
+                tryCandidate(layerIndex + 1, dateIndex);
             }
         });
 
@@ -120,22 +141,60 @@ function applyNDVI() {
         ndviLayer = layer;
     }
 
-    tryLayer(primaryLayer, false);
+    tryCandidate(0, 0);
 }
 
 function _removeNDVI() {
+    ndviRequestId++;
     if (ndviLayer && map && map.hasLayer(ndviLayer)) {
         map.removeLayer(ndviLayer);
     }
     ndviLayer = null;
+    if (ndviFieldMask && map && map.hasLayer(ndviFieldMask)) map.removeLayer(ndviFieldMask);
+    if (ndviFieldOutline && map && map.hasLayer(ndviFieldOutline)) map.removeLayer(ndviFieldOutline);
+    ndviFieldMask = null;
+    ndviFieldOutline = null;
+}
+
+function _showNDVIFieldFocus() {
+    const fields = loadFields();
+    if (!map || !fields.length) return;
+
+    if (satelliteBaseLayer && !map.hasLayer(satelliteBaseLayer)) satelliteBaseLayer.addTo(map);
+
+    // Do not add a world mask here. Leaflet renders polygon holes differently
+    // across browsers and can wash out the complete map. Field focus is provided
+    // by the saved-field bounds and the outline layer below.
+    ndviFieldMask = null;
+
+    ndviFieldOutline = L.geoJSON(
+        { type: 'FeatureCollection', features: fields.map(field => ({
+            type: 'Feature', geometry: field.geometry, properties: {}
+        })) },
+        {
+            style: {
+                color: '#14532d',
+                weight: 2.5,
+                opacity: 0.95,
+                fill: false,
+                interactive: false
+            }
+        }
+    ).addTo(map);
+
+    const bounds = ndviFieldOutline.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
 }
 
 function initMap() {
     if (!document.getElementById('map')) return;
 
     map = L.map('map', { zoomControl: false }).setView([-29, 25], 6);
+    map.createPane('ndviPane');
+    map.getPane('ndviPane').style.zIndex = 210;
 
     const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri', maxZoom: 19 });
+    satelliteBaseLayer = sat;
     const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 });
     const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
         maxZoom: 17,

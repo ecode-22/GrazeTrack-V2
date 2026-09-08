@@ -225,14 +225,15 @@ async function fetchRainfall() {
         const url =
             `https://api.open-meteo.com/v1/forecast` +
             `?latitude=${center.lat.toFixed(4)}&longitude=${center.lng.toFixed(4)}` +
-            `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max` +
+            `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max` +
             `&past_days=14&forecast_days=7&timezone=auto`;
 
         const res  = await fetch(url);
         if (!res.ok) throw new Error();
         const data = await res.json();
-        const { time: dates, weathercode: codes, temperature_2m_max: tMax, temperature_2m_min: tMin,
+        const { time: dates, weather_code: codes, temperature_2m_max: tMax, temperature_2m_min: tMin,
                 precipitation_sum: rain, precipitation_probability_max: rainProb } = data.daily;
+        if (!Array.isArray(dates) || !Array.isArray(codes) || !Array.isArray(rain)) throw new Error('Invalid weather response');
 
         const today   = todayStr();
         const histIdx = dates.reduce((acc, d, i) => { if (d < today)  acc.push(i); return acc; }, []);

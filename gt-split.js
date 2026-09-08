@@ -483,7 +483,8 @@ function _asRebuildCamps() {
             polys.push(remaining);
         }
 
-        const valid = polys.filter(p => calcAreaHa(p.geometry) > 0.01);
+        // Keep small paddocks; 0.01 ha incorrectly discarded small spaces.
+        const valid = polys.filter(p => calcAreaHa(p.geometry) > 0.000001);
         AS.camps = valid.map((p,i) => ({
             id:      uid(),
             name:    oldNames[i] || `Camp ${i+1}`,
@@ -531,8 +532,8 @@ function _asCutWithLine(poly, linePts) {
         const lc=[p1,p2,[p2[0]+nx*ext,p2[1]+ny*ext],[p1[0]+nx*ext,p1[1]+ny*ext],[p1[0],p1[1]]];
         const rc=[p1,p2,[p2[0]-nx*ext,p2[1]-ny*ext],[p1[0]-nx*ext,p1[1]-ny*ext],[p1[0],p1[1]]];
         const inp=(poly.geometry&&poly.geometry.type==='MultiPolygon')?_asLargestPolygon(poly):poly;
-        const left =turf.intersect(inp,turf.polygon([lc]));
-        const right=turf.intersect(inp,turf.polygon([rc]));
+        const left = turf.intersect(inp, turf.polygon([lc]));
+        const right = turf.intersect(inp, turf.polygon([rc]));
         const result=[];
         if(left)  result.push(left);
         if(right) result.push(right);

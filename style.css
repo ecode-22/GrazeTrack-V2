@@ -230,6 +230,7 @@ body {
     border-bottom: 1px solid var(--border-light);
 }
 
+
 .sb-fields {
     flex: 1;
     overflow-y: auto;
@@ -350,6 +351,41 @@ body {
     padding: 12px;
     margin-top: 6px;
     box-shadow: var(--shadow-sm);
+}
+
+.ndvi-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: var(--text);
+    font-size: 12px;
+}
+
+.ndvi-heading span {
+    color: var(--text-muted);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+.ndvi-legend-bar {
+    height: 12px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #7c2d12 0%, #ca8a04 35%, #a3e635 65%, #166534 100%);
+}
+
+.ndvi-legend-labels {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-muted);
+    font-size: 9px;
+    margin: 4px 0 12px;
+}
+
+.leaflet-tile-pane img[src*="gibs.earthdata.nasa.gov"] {
+    filter: saturate(1.8) contrast(1.25);
 }
 
 .ndvi-grad-bar {

@@ -9,7 +9,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=8">
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <!-- Supabase/auth temporarily disabled. -->
@@ -50,12 +50,10 @@
                 🔥 Historical Grazing Pressure
             </button>
 
-            <div class="ndvi-panel" id="ndviPanel" style="display:none; margin-top:10px; padding:10px; border:1px solid #ddd; border-radius:8px; background:#fff;">
-                <div style="height:10px; border-radius:5px; margin-bottom:4px; background:linear-gradient(to right, #7c2d12, #ca8a04, #4ade80, #14532d);"></div>
-                <div style="display:flex; justify-content:space-between; font-size:9px; color:#6b7280; margin-bottom:10px;">
-                    <span>Stressed/Bare</span>
-                    <span>Lush/Dense</span>
-                </div>
+            <div class="ndvi-panel" id="ndviPanel" style="display:none;">
+                <div class="ndvi-heading"><strong>Vegetation condition</strong><span>Satellite composite</span></div>
+                <div class="ndvi-legend-bar"></div>
+                <div class="ndvi-legend-labels"><span>Low growth</span><span>High growth</span></div>
                 <div class="ndvi-controls">
                     <div style="margin-bottom:8px;">
                         <label style="font-size:11px; font-weight:600; display:block; margin-bottom:4px;">Map Date</label>
@@ -66,7 +64,7 @@
                         <input type="range" id="ndviOpacity" min="0.1" max="1.0" step="0.1" value="0.7" oninput="applyNDVI()" style="width:100%;">
                     </div>
                 </div>
-                <p class="ndvi-note">Uses NASA satellite data. Processing lag is ~14 days from today.</p>
+                <p class="ndvi-note">The satellite image stays visible for sharper field detail. NDVI is a broad 250 m vegetation signal, not a pasture yield measurement.</p>
             </div>
 
             <p class="tool-hint" id="toolHint">💡 Click a field on the map to select it</p>
@@ -448,7 +446,7 @@
     </script>
     <script src="gt-split.js"></script>
     <script src="gt-events.js"></script>
-    <script src="gt-map.js"></script>
+    <script src="gt-map.js?v=14"></script>
     <script src="gt-dashboard.js"></script>
     <script src="gt-analytics.js"></script>
     <script src="gt-data.js"></script>
